@@ -10,8 +10,6 @@ import {
   MessageSquare,
   Globe,
   Clock,
-  Sparkles,
-  Bot,
 } from 'lucide-react';
 import {
   conversationStorage,
@@ -204,11 +202,7 @@ export const ConversationLogsModal: React.FC<ConversationLogsModalProps> = ({
                         <span className="font-semibold text-emerald-400">You</span>
                       ) : (
                         <div className="flex items-center gap-1 text-sky-400 font-semibold">
-                          <Bot className="w-3 h-3" />
                           <span>Maya</span>
-                          <span className="text-[9px] px-1 rounded bg-sky-950 text-sky-300 border border-sky-500/30">
-                            Gemini 3.8
-                          </span>
                         </div>
                       )}
                       {entry.language && entry.language !== 'auto' && (
@@ -227,27 +221,29 @@ export const ConversationLogsModal: React.FC<ConversationLogsModalProps> = ({
                     {entry.text}
                   </p>
 
-                  {/* Grounded Web Sources (if available from Google Search Grounding) */}
-                  {entry.sources && entry.sources.length > 0 && (
+                  {/* Saved Web Links (sanitized http/https only) */}
+                  {entry.sources && entry.sources.filter((s) => /^https?:\/\//i.test(s.url)).length > 0 && (
                     <div className="mt-2.5 pt-2 border-t border-slate-800/80">
                       <div className="flex items-center gap-1 text-[10px] font-bold text-sky-400 uppercase tracking-wider mb-1.5">
                         <Globe className="w-3 h-3 text-sky-400" />
-                        <span>Live Internet Sources Referenced:</span>
+                        <span>Referenced Web Links:</span>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {entry.sources.map((src, sIdx) => (
-                          <a
-                            key={sIdx}
-                            href={src.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-950/80 hover:bg-slate-800 border border-sky-500/30 text-[10px] text-sky-300 hover:text-white transition-colors truncate max-w-[260px]"
-                            title={src.title}
-                          >
-                            <span className="truncate">{src.title || 'Web Source'}</span>
-                            <ExternalLink className="w-2.5 h-2.5 shrink-0 text-slate-400" />
-                          </a>
-                        ))}
+                        {entry.sources
+                          .filter((s) => /^https?:\/\//i.test(s.url))
+                          .map((src, sIdx) => (
+                            <a
+                              key={sIdx}
+                              href={src.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-950/80 hover:bg-slate-800 border border-sky-500/30 text-[10px] text-sky-300 hover:text-white transition-colors truncate max-w-[260px]"
+                              title={src.title}
+                            >
+                              <span className="truncate">{src.title || 'Web Source'}</span>
+                              <ExternalLink className="w-2.5 h-2.5 shrink-0 text-slate-400" />
+                            </a>
+                          ))}
                       </div>
                     </div>
                   )}

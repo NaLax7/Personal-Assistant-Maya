@@ -1,8 +1,8 @@
 /**
  * Audio Hardware & Speech Manager
- * Supports Gemini AI Neural Human Voice (via /api/tts),
+ * Supports expressive voice playback (via /api/tts),
  * single shared microphone stream, real-time VU visualizer,
- * Web Speech API recognition, Web Audio chimes, and fallback SpeechSynthesis.
+ * continuous wake-word listening, acoustic chimes, and natural device fallback.
  */
 
 export type MicStatus = 'idle' | 'requesting' | 'active' | 'denied' | 'unsupported';
@@ -474,13 +474,12 @@ class AudioHardwareManager {
         osc.start(now);
         osc.stop(now + 0.25);
       }
-    } catch (e) {
-      console.warn('Audio chime error:', e);
+    } catch {
+      // Ignore chime errors on locked audio contexts
     }
   }
 
-  // Primary: Lifelike Human AI Voice Generation (Gemini Neural TTS)
-  // Calls /api/tts to produce real human sound, falling back to tuned native synthesis if offline
+  // Primary expressive voice playback via /api/tts
   public async speakHuman(
     text: string,
     langHint?: string,
@@ -503,7 +502,7 @@ class AudioHardwareManager {
     }
 
     try {
-      // Step 1: Request natural human speech audio from Gemini 3.8 Flash TTS
+      // Request natural human speech audio from server voice endpoint
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

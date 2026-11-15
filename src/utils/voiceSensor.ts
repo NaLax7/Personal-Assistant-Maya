@@ -42,17 +42,28 @@ export class VoiceSensor {
   private isListening: boolean = false;
 
   public getStoredProfile(): UserProfile {
-    const raw = localStorage.getItem('aura_user_profile');
+    const raw =
+      localStorage.getItem('maya_user_profile') ||
+      localStorage.getItem('aura_user_profile');
     if (raw) {
       try {
-        return JSON.parse(raw);
-      } catch {}
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.name === 'string') {
+          return { ...DEFAULT_PROFILE, ...parsed };
+        }
+      } catch {
+        // Fallback cleanly to defaults
+      }
     }
     return DEFAULT_PROFILE;
   }
 
   public saveProfile(profile: UserProfile): void {
-    localStorage.setItem('aura_user_profile', JSON.stringify(profile));
+    try {
+      localStorage.setItem('maya_user_profile', JSON.stringify(profile));
+    } catch {
+      // ignore storage quota errors
+    }
   }
 
   public async startSensor(stream: MediaStream): Promise<void> {
@@ -69,8 +80,8 @@ export class VoiceSensor {
       this.analyser.fftSize = 2048;
       source.connect(this.analyser);
       this.isListening = true;
-    } catch (e) {
-      console.warn('Voice sensor start failed:', e);
+    } catch {
+      this.isListening = false;
     }
   }
 
@@ -197,7 +208,6 @@ export class VoiceSensor {
       }
       correlation = 1 - correlation / maxSamples;
       if (correlation > 0.9 && correlation > lastCorrelation) {
-        let foundOffset = true;
         if (correlation > bestCorrelation) {
           bestCorrelation = correlation;
           bestOffset = offset;

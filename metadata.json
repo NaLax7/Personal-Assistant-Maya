@@ -1,6 +1,6 @@
 {
-  "name": "Aura 24/7 Tablet Assistant",
-  "description": "Always-on horizontal tablet assistant featuring a realistic human companion, live ambient watch, task management, day schedule, weather, wishes, and soothing music.",
+  "name": "Maya Companion",
+  "description": "Always-on personal tablet and mobile companion with natural conversation, live clock, daily schedule, tasks, and local weather.",
   "requestFramePermissions": ["geolocation", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

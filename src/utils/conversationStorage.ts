@@ -31,8 +31,7 @@ export const conversationStorage = {
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      console.warn('Failed to read conversation logs from storage:', e);
+    } catch {
       return [];
     }
   },
@@ -51,8 +50,8 @@ export const conversationStorage = {
       const current = this.getLogs();
       const updated = [...current, newLog].slice(-MAX_LOGS);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (e) {
-      console.warn('Failed to save log entry:', e);
+    } catch {
+      // ignore storage quota
     }
 
     return newLog;
@@ -61,8 +60,8 @@ export const conversationStorage = {
   clearLogs(): void {
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch (e) {
-      console.warn('Failed to clear conversation logs:', e);
+    } catch {
+      // ignore
     }
   },
 

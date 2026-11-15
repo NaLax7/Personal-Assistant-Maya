@@ -1,5 +1,5 @@
 /**
- * Real-Time Gemini Live API Client (gemini-3.8-live)
+ * Real-Time Audio Voice Client
  * Streams 16kHz PCM mic audio to /live WebSocket and plays 24kHz PCM audio output seamlessly.
  */
 

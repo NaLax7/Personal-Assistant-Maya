@@ -21,10 +21,10 @@ export default defineConfig(() => {
         ],
         manifest: {
           id: '/',
-          name: 'Maya Companion · Aura 24/7',
-          short_name: 'Maya Aura',
+          name: 'Maya Companion',
+          short_name: 'Maya',
           description:
-            'Always-on companion and daily assistant featuring natural multilingual conversation, Live Voice, clock, schedule, tasks, and weather.',
+            'Always-on personal tablet and mobile companion with natural voice conversation, live clock, schedule, tasks, and weather.',
           theme_color: '#090d16',
           background_color: '#090d16',
           display: 'standalone',
@@ -97,10 +97,7 @@ export default defineConfig(() => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };

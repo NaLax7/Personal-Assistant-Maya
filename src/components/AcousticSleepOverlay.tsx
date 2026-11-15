@@ -67,7 +67,7 @@ export const AcousticSleepOverlay: React.FC<AcousticSleepOverlayProps> = ({
       {/* Bottom hint */}
       <div className="text-center opacity-25">
         <span className="text-[10px] font-mono text-zinc-600">
-          Aura Tablet Sentinel · Maya is listening for {userName}
+          Maya Standby Display · Listening for {userName}
         </span>
       </div>
     </div>

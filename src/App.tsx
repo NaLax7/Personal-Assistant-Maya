@@ -1,8 +1,3 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Task, ScheduleEvent, WeatherData } from './types/assistant';
 import { WatchWidget } from './components/WatchWidget';
@@ -17,6 +12,28 @@ import { detectTabletLocation, fetchLiveWeather, TabletLocation } from './utils/
 import { tabletVoiceSensor, UserProfile } from './utils/voiceSensor';
 import { acousticWakeEngine } from './utils/acousticWakeEngine';
 import { Moon, Sun, Clock, LayoutGrid, WifiOff } from 'lucide-react';
+
+const TASKS_STORAGE_KEY = 'maya_tasks_v1';
+const SCHEDULE_STORAGE_KEY = 'maya_schedule_v1';
+
+const DEFAULT_TASKS: Task[] = [
+  { id: '1', title: 'Morning hydration & 5m breathwork', completed: true, category: 'Wellness', priority: 'medium', time: '08:00' },
+  { id: '2', title: `Review day's goals with Maya`, completed: true, category: 'Focus', priority: 'high', time: '09:30' },
+  { id: '3', title: 'Stretch & brisk outdoor walk', completed: false, category: 'Wellness', priority: 'medium', time: '13:00' },
+  { id: '4', title: 'Deep focus: Architecture & planning', completed: false, category: 'Focus', priority: 'high', time: '14:30' },
+  { id: '5', title: 'Water indoor plants & tidy desk', completed: false, category: 'Home', priority: 'low', time: '17:30' },
+  { id: '6', title: 'Evening book reading without screens', completed: false, category: 'Routine', priority: 'medium', time: '21:30' },
+];
+
+const DEFAULT_SCHEDULE: ScheduleEvent[] = [
+  { id: 'e1', title: 'Gentle Wake-up & Morning Coffee', time: '07:30', duration: '30m', category: 'routine', completed: true },
+  { id: 'e2', title: 'Day Alignment with Maya', time: '09:00', duration: '30m', category: 'focus', completed: true },
+  { id: 'e3', title: 'Deep Work Block 1', time: '10:00', duration: '1.5h', category: 'focus', completed: false },
+  { id: 'e4', title: 'Lunch & Fresh Air Break', time: '12:30', duration: '45m', category: 'break', completed: false },
+  { id: 'e5', title: 'Project Deep Dive', time: '14:00', duration: '1h', category: 'focus', completed: false },
+  { id: 'e6', title: 'Afternoon Tea & Reset', time: '16:00', duration: '20m', category: 'health', completed: false },
+  { id: 'e7', title: 'Dinner & Relaxation', time: '19:00', duration: '1h', category: 'routine', completed: false },
+];
 
 export default function App() {
   // User Profile with Voice Sensor integration
@@ -36,8 +53,8 @@ export default function App() {
 
   // Tablet Location & Weather
   const [location, setLocation] = useState<TabletLocation>({
-    latitude: 51.5074,
-    longitude: -0.1278,
+    latitude: 51.51,
+    longitude: -0.13,
     city: 'Detecting Location...',
     source: 'cached',
   });
@@ -53,9 +70,10 @@ export default function App() {
     feelsLike: 21,
   });
 
-  // Acoustic Voice Wake-Up & Auto-Sleep State
-  const [acousticSleepMode, setAcousticSleepMode] = useState<'off' | '1m' | '2m'>(() => {
-    return (localStorage.getItem('aura_acoustic_mode') as 'off' | '1m' | '2m') || '2m';
+  // Standby screen blackout (off by default so display never turns black unexpectedly)
+  const [acousticSleepMode] = useState<'off' | '1m' | '2m'>(() => {
+    const saved = localStorage.getItem('maya_acoustic_mode');
+    return saved === '1m' || saved === '2m' ? saved : 'off';
   });
   const [isSleeping, setIsSleeping] = useState(false);
   const [secondsUntilSleep, setSecondsUntilSleep] = useState(120);
@@ -89,7 +107,7 @@ export default function App() {
   }, [acousticSleepMode, isSleeping, getTimeoutSeconds]);
 
   useEffect(() => {
-    localStorage.setItem('aura_acoustic_mode', acousticSleepMode);
+    localStorage.setItem('maya_acoustic_mode', acousticSleepMode);
     setSecondsUntilSleep(getTimeoutSeconds(acousticSleepMode));
 
     if (acousticSleepMode === 'off') {
@@ -167,26 +185,49 @@ export default function App() {
     };
   }, []);
 
-  // Tasks state
-  const [tasks, setTasks] = useState<Task[]>([
-    { id: '1', title: 'Morning hydration & 5m breathwork', completed: true, category: 'Wellness', priority: 'medium', time: '08:00' },
-    { id: '2', title: `Review day's goals with Maya`, completed: true, category: 'Focus', priority: 'high', time: '09:30' },
-    { id: '3', title: 'Stretch & brisk outdoor walk', completed: false, category: 'Wellness', priority: 'medium', time: '13:00' },
-    { id: '4', title: 'Deep focus: Architecture & planning', completed: false, category: 'Focus', priority: 'high', time: '14:30' },
-    { id: '5', title: 'Water indoor plants & tidy desk', completed: false, category: 'Home', priority: 'low', time: '17:30' },
-    { id: '6', title: 'Evening book reading without screens', completed: false, category: 'Routine', priority: 'medium', time: '21:30' },
-  ]);
+  // Tasks state (persisted locally on device)
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try {
+      const raw = localStorage.getItem(TASKS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // Fallback to defaults
+    }
+    return DEFAULT_TASKS;
+  });
 
-  // Schedule timeline events
-  const [schedule, setSchedule] = useState<ScheduleEvent[]>([
-    { id: 'e1', title: 'Gentle Wake-up & Morning Coffee', time: '07:30', duration: '30m', category: 'routine', completed: true },
-    { id: 'e2', title: 'Day Alignment with Maya', time: '09:00', duration: '30m', category: 'focus', completed: true },
-    { id: 'e3', title: 'Deep Work Block 1', time: '10:00', duration: '1.5h', category: 'focus', completed: false },
-    { id: 'e4', title: 'Lunch & Fresh Air Break', time: '12:30', duration: '45m', category: 'break', completed: false },
-    { id: 'e5', title: 'Project Deep Dive', time: '14:00', duration: '1h', category: 'focus', completed: false },
-    { id: 'e6', title: 'Afternoon Tea & Reset', time: '16:00', duration: '20m', category: 'health', completed: false },
-    { id: 'e7', title: 'Dinner & Relaxation', time: '19:00', duration: '1h', category: 'routine', completed: false },
-  ]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+    } catch {
+      // ignore storage quota
+    }
+  }, [tasks]);
+
+  // Schedule timeline events (persisted locally on device)
+  const [schedule, setSchedule] = useState<ScheduleEvent[]>(() => {
+    try {
+      const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // Fallback to defaults
+    }
+    return DEFAULT_SCHEDULE;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedule));
+    } catch {
+      // ignore storage quota
+    }
+  }, [schedule]);
 
   // Tablet 24/7 Night Dim state
   const [isNightDim, setIsNightDim] = useState(false);
@@ -248,9 +289,43 @@ export default function App() {
     };
   }, []);
 
+  // Keep Android tablet display awake automatically when open and visible
+  useEffect(() => {
+    let wakeLock: any = null;
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator && document.visibilityState === 'visible') {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch {
+        // Ignore if battery saver or browser denies wake lock
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    };
+    const handleFirstInteract = () => {
+      requestWakeLock();
+    };
+
+    requestWakeLock();
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pointerdown', handleFirstInteract, { once: true });
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pointerdown', handleFirstInteract);
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
+    };
+  }, []);
+
   return (
     <div
-      className={`min-h-screen md:h-screen w-full transition-colors duration-500 overflow-x-hidden overflow-y-auto md:overflow-hidden flex flex-col ${
+      className={`min-h-screen lg:h-dvh w-full transition-colors duration-500 overflow-x-hidden overflow-y-auto lg:overflow-hidden flex flex-col ${
         isNightDim
           ? 'bg-black text-amber-100/90'
           : 'bg-[#060913] text-slate-100'
@@ -325,11 +400,11 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Responsive Split (Portrait Phone: Maya first & scrollable; Landscape Tablet: 1280x800 Zero-Scroll) */}
+      {/* Main Responsive Split (Portrait Phone/Tablet: Maya first & scrollable; Landscape Android Tablet: Zero-Scroll) */}
       {viewMode === 'clock' ? (
-        <main className="flex-1 p-3 sm:p-4 md:overflow-hidden grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch w-full max-w-[1920px] mx-auto min-h-0">
-          {/* Clock Hero: 2nd on phone, 1st on tablet/desktop */}
-          <div className="order-2 md:order-1 md:col-span-6 md:h-full md:overflow-hidden flex flex-col min-h-[260px] md:min-h-0">
+        <main className="flex-1 p-3 sm:p-4 lg:overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch w-full max-w-[1920px] mx-auto min-h-0">
+          {/* Clock Hero: 2nd on portrait, 1st on landscape tablet */}
+          <div className="order-2 lg:order-1 lg:col-span-6 lg:h-full lg:overflow-hidden flex flex-col min-h-[260px] lg:min-h-0">
             <WatchWidget
               weather={weather}
               isNightDim={isNightDim}
@@ -338,8 +413,8 @@ export default function App() {
             />
           </div>
 
-          {/* Maya Companion: 1st on phone, 2nd on tablet/desktop */}
-          <div className="order-1 md:order-2 md:col-span-6 md:h-full flex flex-col md:overflow-hidden min-h-0">
+          {/* Maya Companion: 1st on portrait, 2nd on landscape tablet */}
+          <div className="order-1 lg:order-2 lg:col-span-6 lg:h-full flex flex-col lg:overflow-hidden min-h-0">
             <RealisticMayaCard
               tasks={tasks}
               schedule={schedule}
@@ -358,15 +433,15 @@ export default function App() {
           </div>
         </main>
       ) : (
-        <main className="flex-1 p-3 sm:p-3.5 md:overflow-hidden grid grid-cols-1 md:grid-cols-12 gap-3.5 items-stretch w-full max-w-[1920px] mx-auto min-h-0">
-          {/* Planner Left Column: 2nd on phone, 1st on tablet/desktop */}
-          <div className="order-2 md:order-1 md:col-span-7 flex flex-col gap-3 md:h-full md:overflow-hidden min-h-0">
+        <main className="flex-1 p-3 sm:p-3.5 lg:overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch w-full max-w-[1920px] mx-auto min-h-0">
+          {/* Planner Left Column: 2nd on portrait, 1st on landscape tablet */}
+          <div className="order-2 lg:order-1 lg:col-span-7 flex flex-col gap-3 lg:h-full lg:overflow-hidden min-h-0">
             <WatchWidget weather={weather} isNightDim={isNightDim} variant="compact" />
 
             <WishesWidget isNightDim={isNightDim} />
 
-            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-3 md:overflow-hidden">
-              <div className="md:h-full md:overflow-hidden flex flex-col min-h-0">
+            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-3 lg:overflow-hidden">
+              <div className="lg:h-full lg:overflow-hidden flex flex-col min-h-0">
                 <TasksStrip
                   tasks={tasks}
                   onToggleTask={handleToggleTask}
@@ -376,7 +451,7 @@ export default function App() {
                 />
               </div>
 
-              <div className="md:h-full md:overflow-hidden flex flex-col min-h-0">
+              <div className="lg:h-full lg:overflow-hidden flex flex-col min-h-0">
                 <ScheduleWidget
                   events={schedule}
                   onAddEvent={handleAddEvent}
@@ -388,8 +463,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Maya Companion: 1st on phone, 2nd on tablet/desktop */}
-          <div className="order-1 md:order-2 md:col-span-5 md:h-full flex flex-col md:overflow-hidden min-h-0">
+          {/* Maya Companion: 1st on portrait, 2nd on landscape tablet */}
+          <div className="order-1 lg:order-2 lg:col-span-5 lg:h-full flex flex-col lg:overflow-hidden min-h-0">
             <RealisticMayaCard
               tasks={tasks}
               schedule={schedule}

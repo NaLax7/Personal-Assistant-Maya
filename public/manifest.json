@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Maya Companion · Aura 24/7",
-  "short_name": "Maya Aura",
-  "description": "Always-on companion and daily assistant featuring natural multilingual conversation, Live Voice, clock, schedule, tasks, and weather.",
+  "name": "Maya Companion",
+  "short_name": "Maya",
+  "description": "Always-on personal tablet and mobile companion with natural voice conversation, live clock, schedule, tasks, and weather.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

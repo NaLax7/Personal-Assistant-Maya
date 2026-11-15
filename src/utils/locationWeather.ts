@@ -21,20 +21,34 @@ export interface TabletLocation {
   longitude: number;
   city: string;
   country?: string;
-  source: 'gps' | 'ip' | 'cached' | 'fallback';
+  source: 'gps' | 'cached' | 'fallback';
+}
+
+const LOCATION_KEY = 'maya_tablet_location';
+const WEATHER_KEY = 'maya_cached_weather';
+
+function safeParseJson<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
 export async function detectTabletLocation(): Promise<TabletLocation> {
-  // Check cached location first
-  const cached = localStorage.getItem('aura_tablet_location');
-  let fallbackLocation: TabletLocation = cached
-    ? JSON.parse(cached)
-    : {
-        latitude: 51.5074,
-        longitude: -0.1278,
-        city: 'Local Tablet',
-        source: 'fallback',
-      };
+  const cached = safeParseJson<TabletLocation>(
+    localStorage.getItem(LOCATION_KEY) || localStorage.getItem('aura_tablet_location')
+  );
+  const fallbackLocation: TabletLocation =
+    cached && typeof cached.latitude === 'number' && typeof cached.longitude === 'number'
+      ? cached
+      : {
+          latitude: 51.51,
+          longitude: -0.13,
+          city: 'Local Device',
+          source: 'fallback',
+        };
 
   return new Promise((resolve) => {
     if (!('geolocation' in navigator)) {
@@ -49,25 +63,25 @@ export async function detectTabletLocation(): Promise<TabletLocation> {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         clearTimeout(timeout);
-        const { latitude, longitude } = pos.coords;
-        let detectedCity = 'Tablet Location';
+        // Round to ~1km precision so exact street coordinates are never persisted or transmitted
+        const latitude = Math.round(pos.coords.latitude * 100) / 100;
+        const longitude = Math.round(pos.coords.longitude * 100) / 100;
+        let detectedCity = 'Local Device';
 
         try {
-          // Reverse geocode via server proxy to avoid browser CORS/403 errors
           const geoRes = await fetch(`/api/reverse-geocode?lat=${latitude}&lon=${longitude}`);
           if (geoRes.ok) {
             const data = await geoRes.json();
-            if (data.city && data.city !== 'Local Tablet') {
-              detectedCity = data.city;
+            if (typeof data.city === 'string' && data.city.trim()) {
+              detectedCity = data.city.trim();
             }
           }
         } catch {
-          // If reverse geocoding is unavailable, use time zone name as city approximation
           try {
             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            detectedCity = tz.split('/')[1]?.replace(/_/g, ' ') || 'Local Tablet';
+            detectedCity = tz.split('/')[1]?.replace(/_/g, ' ') || 'Local Device';
           } catch {
-            // Keep generic
+            // Keep default
           }
         }
 
@@ -78,17 +92,22 @@ export async function detectTabletLocation(): Promise<TabletLocation> {
           source: 'gps',
         };
 
-        localStorage.setItem('aura_tablet_location', JSON.stringify(loc));
+        try {
+          localStorage.setItem(LOCATION_KEY, JSON.stringify(loc));
+        } catch {
+          // ignore storage quota
+        }
         resolve(loc);
       },
-      (err) => {
+      () => {
         clearTimeout(timeout);
-        // Fallback silently to Timezone estimation
         try {
           const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          const tzCity = tz.split('/')[1]?.replace(/_/g, ' ') || 'Local Tablet';
+          const tzCity = tz.split('/')[1]?.replace(/_/g, ' ') || 'Local Device';
           fallbackLocation.city = tzCity;
-        } catch {}
+        } catch {
+          // ignore
+        }
         resolve(fallbackLocation);
       },
       { timeout: 5000, enableHighAccuracy: false }
@@ -98,7 +117,9 @@ export async function detectTabletLocation(): Promise<TabletLocation> {
 
 export async function fetchLiveWeather(loc: TabletLocation): Promise<WeatherData> {
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
+    const lat = Number(loc.latitude.toFixed(2));
+    const lon = Number(loc.longitude.toFixed(2));
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
     const res = await fetch(url);
     if (!res.ok) throw new Error('Weather API request failed');
 
@@ -117,13 +138,18 @@ export async function fetchLiveWeather(loc: TabletLocation): Promise<WeatherData
       feelsLike: Math.round(current.apparent_temperature),
     };
 
-    localStorage.setItem('aura_cached_weather', JSON.stringify(weatherData));
+    try {
+      localStorage.setItem(WEATHER_KEY, JSON.stringify(weatherData));
+    } catch {
+      // ignore storage quota
+    }
     return weatherData;
-  } catch (e) {
-    console.warn('Failed to fetch Open-Meteo live weather, using cached or baseline:', e);
-    const cached = localStorage.getItem('aura_cached_weather');
-    if (cached) {
-      return JSON.parse(cached);
+  } catch {
+    const cached = safeParseJson<WeatherData>(
+      localStorage.getItem(WEATHER_KEY) || localStorage.getItem('aura_cached_weather')
+    );
+    if (cached && typeof cached.temp === 'number') {
+      return cached;
     }
     return {
       temp: 21,
@@ -132,7 +158,7 @@ export async function fetchLiveWeather(loc: TabletLocation): Promise<WeatherData
       low: 15,
       humidity: 50,
       windSpeed: 10,
-      city: loc.city || 'Tablet Location',
+      city: loc.city || 'Local Device',
       feelsLike: 21,
     };
   }

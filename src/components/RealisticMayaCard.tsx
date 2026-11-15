@@ -25,9 +25,9 @@ import {
 import { liveVoiceClient, LiveConnectionState } from '../utils/liveVoiceClient';
 import { conversationStorage } from '../utils/conversationStorage';
 import { ConversationLogsModal } from './ConversationLogsModal';
+import mayaPortrait from '../assets/images/companion_maya_1793524129665.jpg';
 
-// Single, permanent, photorealistic portrait of Maya smiling warmly with her whole face visible
-const MAYA_SMILING_PHOTO = '/src/assets/images/companion_maya_1793524129665.jpg';
+const MAYA_SMILING_PHOTO = mayaPortrait;
 
 interface ChatMessage {
   id: string;
@@ -92,7 +92,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
   const [quotaNotice, setQuotaNotice] = useState(false);
   const [apiErrorNotice, setApiErrorNotice] = useState('');
 
-  // Gemini 3.8 Live API Voice Session state + seamless Voice Turn fallback
+  // Real-Time Live Voice Session state + seamless Voice Turn fallback
   const [liveState, setLiveState] = useState<LiveConnectionState>('disconnected');
   const [liveSpeaking, setLiveSpeaking] = useState(false);
   const [liveQuotaUnavailable, setLiveQuotaUnavailable] = useState(false);
@@ -104,7 +104,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
   const liveInputBufferRef = useRef<string>('');
   const liveOutputBufferRef = useRef<string>('');
 
-  // Gemini 3.5 Transcribe + Gemini 3.8 Flash TTS Voice Turn state
+  // Voice Turn recording state
   const [isRecordingMemo, setIsRecordingMemo] = useState(false);
   const [isTranscribingMemo, setIsTranscribingMemo] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -123,6 +123,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [gestureFeedback, setGestureFeedback] = useState<GestureFeedback | null>(null);
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const lastTouchTimeRef = useRef<number>(0);
 
   const [transcript, setTranscript] = useState('');
 
@@ -197,7 +198,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     setTimeout(() => setGestureFeedback(null), 1500);
   }, []);
 
-  // Speak using the Gemini Emotive Human Voice (gemini-3.8-flash-lite-tts)
+  // Speak using Maya's expressive voice engine
   const speakText = useCallback(
     (text: string, langHint?: string, onEndCallback?: () => void) => {
       if (!voiceEnabled || liveState === 'connected') {
@@ -475,7 +476,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     ]
   );
 
-  // Send multi-turn message to Gemini (/api/chat)
+  // Send multi-turn message to /api/chat
   const sendMessage = useCallback(
     async (textToSend?: string) => {
       audioManager.unlockAudioContext();
@@ -507,7 +508,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
         tabletVoiceSensor.saveProfile(updated);
       }
 
-      // If Gemini 3.8 Live Voice is active, send typed/quick prompts straight into the live human voice session
+      // If Live Voice is active, send typed/quick prompts straight into the live voice session
       if (liveState === 'connected' && liveVoiceClient.sendText(message)) {
         return;
       }
@@ -585,14 +586,13 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
         const detectedLang = data.detectedLang;
         const sources: Array<{ title: string; url: string }> = data.sources || [];
         setQuotaNotice(Boolean(data.quotaExceeded));
-        setApiErrorNotice(data.apiError ? data.errorDetail || 'Gemini connection issue' : '');
+        setApiErrorNotice(data.apiError ? data.errorDetail || 'Connection notice' : '');
 
         conversationStorage.addEntry({
           sender: 'assistant',
           text: reply,
           language: detectedLang || currentLangCode,
           sources,
-          engine: data.engine,
         });
 
         setChatHistory((prev) => [
@@ -603,7 +603,6 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
             text: reply,
             lang: detectedLang,
             sources,
-            engine: data.engine,
           },
         ]);
 
@@ -677,7 +676,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     ]
   );
 
-  // Toggle Real-Time Gemini 3.8 Live API Voice Conversation
+  // Toggle Real-Time Live Voice Conversation
   const toggleLiveVoice = useCallback(async () => {
     if (liveState === 'connected' || liveState === 'connecting') {
       liveVoiceClient.disconnect();
@@ -733,7 +732,6 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
               sender: 'user',
               text: userSaid,
               language: currentLangCode,
-              engine: 'gemini-3.8-live',
             });
             setChatHistory((prev) => [
               ...prev,
@@ -745,7 +743,6 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
               sender: 'assistant',
               text: mayaSaid,
               language: currentLangCode,
-              engine: 'gemini-3.8-live',
             });
             setChatHistory((prev) => [
               ...prev,
@@ -753,7 +750,6 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
                 id: `la-${Date.now() + 1}`,
                 sender: 'assistant',
                 text: mayaSaid,
-                engine: 'gemini-3.8-live',
               },
             ]);
           }
@@ -786,7 +782,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     handsFreeMode,
   ]);
 
-  // Toggle Voice Memo Recording + Gemini 3.5 Transcribe
+  // Toggle Voice Turn Recording & Transcription
   const toggleTranscribeMemo = useCallback(async () => {
     if (isRecordingMemo && mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
@@ -1005,7 +1001,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     };
   }, [handsFreeMode, currentLangCode, sendMessage, speakText, stopSpeaking, userProfile.name, liveState]);
 
-  // Unified primary Talk handler: uses Gemini 3.8 Live voice when available, or seamless Voice Turn recording
+  // Unified primary Talk handler: uses real-time live voice when available, or seamless Voice Turn recording
   const handlePrimaryTalk = useCallback(() => {
     audioManager.unlockAudioContext();
     if (isSpeaking) {
@@ -1019,10 +1015,16 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     toggleLiveVoice();
   }, [isSpeaking, isRecordingMemo, liveQuotaUnavailable, stopSpeaking, toggleTranscribeMemo, toggleLiveVoice]);
 
-  // Touch & Swipe Gestures
+  // Touch & Swipe Gestures (prevents synthetic mouse double-fire on touchscreens)
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const isTouchEvent = 'touches' in e;
+    if (isTouchEvent) {
+      lastTouchTimeRef.current = Date.now();
+    } else if (Date.now() - lastTouchTimeRef.current < 700) {
+      return;
+    }
+    const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY;
     touchStartRef.current = { x: clientX, y: clientY, time: Date.now() };
     setIsDragging(true);
     setDragOffset({ x: 0, y: 0 });
@@ -1030,8 +1032,10 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
 
   const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
     if (!touchStartRef.current || !isDragging) return;
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const isTouchEvent = 'touches' in e;
+    if (!isTouchEvent && Date.now() - lastTouchTimeRef.current < 700) return;
+    const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY;
     const diffX = clientX - touchStartRef.current.x;
     const diffY = clientY - touchStartRef.current.y;
     setDragOffset({
@@ -1040,7 +1044,14 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     });
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e?: React.TouchEvent | React.MouseEvent) => {
+    const isMouseEvent = e && !('touches' in e) && !('changedTouches' in e);
+    if (isMouseEvent && Date.now() - lastTouchTimeRef.current < 700) {
+      touchStartRef.current = null;
+      setIsDragging(false);
+      setDragOffset({ x: 0, y: 0 });
+      return;
+    }
     if (!touchStartRef.current) {
       setIsDragging(false);
       setDragOffset({ x: 0, y: 0 });
@@ -1055,6 +1066,10 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     setIsDragging(false);
     setDragOffset({ x: 0, y: 0 });
     touchStartRef.current = null;
+
+    if (e && e.type === 'mouseleave') {
+      return;
+    }
 
     if (duration < 380 && Math.hypot(diffX, diffY) < 16) {
       handlePrimaryTalk();
@@ -1206,6 +1221,8 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
         {/* Stop Speaking Button */}
         {isSpeaking && liveState !== 'connected' && (
           <button
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               stopSpeaking();
@@ -1303,7 +1320,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
       <div className="p-3.5 bg-slate-950/60 flex flex-col gap-2.5 flex-1 min-h-0">
         {(quotaNotice || apiErrorNotice) && (
           <div className="text-[11px] text-amber-300/95 px-1 truncate shrink-0" title={apiErrorNotice}>
-            {apiErrorNotice || 'API quota notice — check Settings > Secrets'}
+            {apiErrorNotice || 'Request limit notice — please wait a moment and try again.'}
           </div>
         )}
 
@@ -1348,26 +1365,31 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
 
                 <p className="select-text whitespace-pre-wrap">{msg.text}</p>
 
-                {/* Optional quiet disclosure for saved web links (never read aloud) */}
-                {msg.sources && msg.sources.length > 0 && (
+                {/* Optional quiet disclosure for saved web links (sanitized http/https only) */}
+                {msg.sources && msg.sources.filter((s) => /^https?:\/\//i.test(s.url)).length > 0 && (
                   <details className="mt-2 pt-1.5 border-t border-slate-800/70">
                     <summary className="list-none flex items-center gap-1 text-[10px] text-slate-400 hover:text-sky-300 cursor-pointer select-none">
                       <Globe className="w-3 h-3" />
-                      <span>Links ({Math.min(3, msg.sources.length)})</span>
+                      <span>
+                        Links ({Math.min(3, msg.sources.filter((s) => /^https?:\/\//i.test(s.url)).length)})
+                      </span>
                     </summary>
                     <div className="flex flex-wrap gap-1.5 mt-1">
-                      {msg.sources.slice(0, 3).map((src, idx) => (
-                        <a
-                          key={idx}
-                          href={src.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[10px] text-slate-300 hover:text-white underline truncate max-w-[200px]"
-                        >
-                          <span className="truncate">{src.title || 'Article'}</span>
-                          <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                        </a>
-                      ))}
+                      {msg.sources
+                        .filter((s) => /^https?:\/\//i.test(s.url))
+                        .slice(0, 3)
+                        .map((src, idx) => (
+                          <a
+                            key={idx}
+                            href={src.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-slate-300 hover:text-white underline truncate max-w-[200px]"
+                          >
+                            <span className="truncate">{src.title || 'Article'}</span>
+                            <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                          </a>
+                        ))}
                     </div>
                   </details>
                 )}

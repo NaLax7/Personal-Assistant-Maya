@@ -4,15 +4,14 @@ import {
   Mic,
   MapPin,
   Battery,
-  Wifi,
   Sparkles,
   Check,
   Edit2,
   RefreshCw,
   X,
-  Volume2,
   Activity,
   Shield,
+  Trash2,
 } from 'lucide-react';
 import { UserProfile, tabletVoiceSensor, VoiceAnalysisResult } from '../utils/voiceSensor';
 import { TabletLocation, detectTabletLocation, fetchLiveWeather } from '../utils/locationWeather';
@@ -42,12 +41,17 @@ export const UserProfileSensorsModal: React.FC<UserProfileSensorsModalProps> = (
   const [isLocating, setIsLocating] = useState(false);
   const [isSamplingVoice, setIsSamplingVoice] = useState(false);
   const [voiceSampleStatus, setVoiceSampleStatus] = useState<string>('');
+  const [privacyCleared, setPrivacyCleared] = useState(false);
   const [livePitch, setLivePitch] = useState<number>(profile.voicePitchHz);
   const [liveDb, setLiveDb] = useState<number>(profile.roomNoiseLevel);
   const [batteryInfo, setBatteryInfo] = useState<{ level: number; charging: boolean }>({
     level: 100,
     charging: true,
   });
+
+  useEffect(() => {
+    setNameInput(profile.name);
+  }, [profile.name, isOpen]);
 
   // Battery Sensor
   useEffect(() => {
@@ -78,15 +82,15 @@ export const UserProfileSensorsModal: React.FC<UserProfileSensorsModalProps> = (
     setIsEditingName(false);
   };
 
-  // Re-detect GPS Location
+  // Re-detect approximate city location
   const handleRefreshLocation = async () => {
     setIsLocating(true);
     try {
       const loc = await detectTabletLocation();
       const weather = await fetchLiveWeather(loc);
       onLocationUpdate(loc, weather);
-    } catch (e) {
-      console.error('Location refresh error:', e);
+    } catch {
+      // Keep current cached weather/location quietly
     } finally {
       setIsLocating(false);
     }
@@ -101,7 +105,7 @@ export const UserProfileSensorsModal: React.FC<UserProfileSensorsModalProps> = (
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       await tabletVoiceSensor.startSensor(stream);
 
-      let samples: VoiceAnalysisResult[] = [];
+      const samples: VoiceAnalysisResult[] = [];
       const interval = setInterval(() => {
         const analysis = tabletVoiceSensor.analyzeCurrentAudio();
         if (analysis.speechEnergy > 0.02) {
@@ -132,10 +136,33 @@ export const UserProfileSensorsModal: React.FC<UserProfileSensorsModalProps> = (
           setVoiceSampleStatus('Sample was too quiet, please try again speaking closer to mic.');
         }
       }, 3500);
-    } catch (err) {
-      console.error('Microphone error:', err);
+    } catch {
       setIsSamplingVoice(false);
       setVoiceSampleStatus('Microphone permission required to calibrate voice sensor.');
+    }
+  };
+
+  const handleEraseLocalData = () => {
+    try {
+      const keysToClear = [
+        'maya_user_profile',
+        'aura_user_profile',
+        'maya_tablet_location',
+        'aura_tablet_location',
+        'maya_cached_weather',
+        'aura_cached_weather',
+        'maya_conversation_logs_v1',
+        'maya_tasks_v1',
+        'maya_schedule_v1',
+        'maya_view_mode',
+        'maya_acoustic_mode',
+        'aura_acoustic_mode',
+      ];
+      keysToClear.forEach((k) => localStorage.removeItem(k));
+      setPrivacyCleared(true);
+      setTimeout(() => setPrivacyCleared(false), 3000);
+    } catch {
+      // ignore
     }
   };
 
@@ -300,9 +327,8 @@ export const UserProfileSensorsModal: React.FC<UserProfileSensorsModalProps> = (
               <div className="text-sm font-bold text-white font-display">
                 {location.city}
               </div>
-              <div className="text-xs text-slate-400 font-mono mt-0.5">
-                {location.latitude.toFixed(3)}°N, {location.longitude.toFixed(3)}°E · Source:{' '}
-                {location.source.toUpperCase()}
+              <div className="text-xs text-slate-400 mt-0.5">
+                Stored locally on this device only
               </div>
             </div>
           </div>
@@ -351,34 +377,34 @@ export const UserProfileSensorsModal: React.FC<UserProfileSensorsModalProps> = (
           </div>
         </div>
 
-        {/* Section 5: Gemini LLM & Language Settings */}
+        {/* Section 5: Spoken Language & Privacy */}
         <div className="mt-4 p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-purple-400" />
-              <span className="text-xs font-semibold text-white uppercase tracking-wider font-mono">
-                Gemini LLM & Spoken Language
+              <Shield className="w-4 h-4 text-sky-400" />
+              <span className="text-xs font-semibold text-white">
+                Spoken Language &amp; Privacy
               </span>
             </div>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono">
-              gemini-3.8-flash
+            <span className="text-[11px] text-emerald-300 font-medium">
+              On-device storage
             </span>
           </div>
 
-          <div className="text-xs text-slate-300 mb-2">
-            Maya speaks and understands all languages fluently via Gemini. Wake word is active: say <strong className="text-sky-300">"Maya"</strong> anytime to talk.
+          <div className="text-xs text-slate-300 mb-3">
+            Maya adapts automatically to Slovenian, English, and other languages. Your profile, tasks, schedule, and conversation history stay strictly in your device&apos;s local storage with no IP tracking or server database.
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { code: 'auto', label: 'Auto Detect', flag: '🌐' },
-              { code: 'en-US', label: 'English', flag: '🇬🇧' },
-              { code: 'sl-SI', label: 'Slovenščina', flag: '🇸🇮' },
-              { code: 'de-DE', label: 'Deutsch', flag: '🇩🇪' },
-              { code: 'es-ES', label: 'Español', flag: '🇪🇸' },
-              { code: 'fr-FR', label: 'Français', flag: '🇫🇷' },
-              { code: 'it-IT', label: 'Italiano', flag: '🇮🇹' },
-              { code: 'hr-HR', label: 'Hrvatski', flag: '🇭🇷' },
+              { code: 'auto', label: 'Auto Detect' },
+              { code: 'en-US', label: 'English' },
+              { code: 'sl-SI', label: 'Slovenščina' },
+              { code: 'de-DE', label: 'Deutsch' },
+              { code: 'es-ES', label: 'Español' },
+              { code: 'fr-FR', label: 'Français' },
+              { code: 'it-IT', label: 'Italiano' },
+              { code: 'hr-HR', label: 'Hrvatski' },
             ].map((lang) => (
               <button
                 key={lang.code}
@@ -387,18 +413,34 @@ export const UserProfileSensorsModal: React.FC<UserProfileSensorsModalProps> = (
                   onUpdateProfile(updated);
                   tabletVoiceSensor.saveProfile(updated);
                 }}
-                className={`p-2 rounded-xl text-left border text-xs transition-colors flex items-center justify-between ${
+                className={`p-2 rounded-xl text-left border text-xs transition-colors flex items-center justify-between cursor-pointer ${
                   (profile.language || 'auto') === lang.code
-                    ? 'bg-purple-500/20 text-purple-200 border-purple-500/50 font-semibold'
+                    ? 'bg-sky-500/20 text-sky-200 border-sky-500/50 font-semibold'
                     : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
-                <span>{lang.flag} {lang.label}</span>
+                <span>{lang.label}</span>
                 {(profile.language || 'auto') === lang.code && (
-                  <Check className="w-3 h-3 text-purple-400" />
+                  <Check className="w-3 h-3 text-sky-400" />
                 )}
               </button>
             ))}
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-3">
+            <span className="text-[11px] text-slate-400">
+              {privacyCleared
+                ? 'All local data erased from this device.'
+                : 'Reset stored profile, tasks, schedule, and chat history'}
+            </span>
+            <button
+              type="button"
+              onClick={handleEraseLocalData}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/70 border border-rose-500/30 text-rose-200 text-xs font-medium transition-colors cursor-pointer shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Erase Local Data</span>
+            </button>
           </div>
         </div>
 
@@ -406,7 +448,7 @@ export const UserProfileSensorsModal: React.FC<UserProfileSensorsModalProps> = (
         <div className="mt-6 flex justify-end">
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs shadow-md transition-colors"
+            className="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs shadow-md transition-colors cursor-pointer"
           >
             Done
           </button>

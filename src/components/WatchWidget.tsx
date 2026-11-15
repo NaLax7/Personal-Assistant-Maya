@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CloudSun, Moon, Calendar, MapPin } from 'lucide-react';
 import { WeatherData } from '../types/assistant';
+import ambientBackdrop from '../assets/images/tablet_ambient_backdrop_1794582844111.jpg';
 
 interface WatchWidgetProps {
   weather: WeatherData;
@@ -9,7 +10,7 @@ interface WatchWidgetProps {
   locationCity?: string;
 }
 
-const AMBIENT_BACKDROP = '/src/assets/images/tablet_ambient_backdrop_1794582844111.jpg';
+const AMBIENT_BACKDROP = ambientBackdrop;
 
 export const WatchWidget: React.FC<WatchWidgetProps> = ({
   weather,

@@ -17,9 +17,34 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.disable('x-powered-by');
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-DNS-Prefetch-Control', 'off');
+  next();
+});
 app.use(express.json({ limit: '15mb' }));
 
-// Initialize GoogleGenAI SDK server-side
+function isSafeHttpUrl(rawUrl: unknown): rawUrl is string {
+  if (typeof rawUrl !== 'string') return false;
+  try {
+    const parsed = new URL(rawUrl.trim());
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function isLocalPrivateAddress(addr: string | undefined): boolean {
+  if (!addr) return false;
+  const cleaned = addr.replace(/^::ffff:/, '');
+  if (cleaned === '127.0.0.1' || cleaned === '::1' || cleaned === 'localhost') return true;
+  if (cleaned.startsWith('192.168.') || cleaned.startsWith('10.')) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(cleaned)) return true;
+  return false;
+}
+
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
@@ -29,7 +54,6 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Dedicated Live API client (BidiGenerateContent requires v1beta on @google/genai v3+)
 const aiLive = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
@@ -41,11 +65,16 @@ const aiLive = new GoogleGenAI({
 });
 
 app.get('/api/health', (_req: Request, res: Response) => {
-  return res.json({ status: 'ok', assistant: 'Maya', tabletKiosk: true });
+  return res.json({ status: 'ok', assistant: 'Maya' });
 });
 
-// Local Wi-Fi LAN discovery helper so phones/tablets on the same Wi-Fi see the local address
-app.get('/api/network-info', (_req: Request, res: Response) => {
+// Local Wi-Fi address helper (strictly scoped to private LAN clients; never exposed remotely)
+app.get('/api/network-info', (req: Request, res: Response) => {
+  const forwarded = req.headers['x-forwarded-for'];
+  const remoteAddr = req.socket?.remoteAddress;
+  if (forwarded || !isLocalPrivateAddress(remoteAddr)) {
+    return res.json({ port: PORT, lanUrls: [] });
+  }
   const interfaces = os.networkInterfaces();
   const lanUrls: string[] = [];
   for (const name of Object.keys(interfaces)) {
@@ -62,24 +91,35 @@ app.get('/api/network-info', (_req: Request, res: Response) => {
   return res.json({ port: PORT, lanUrls });
 });
 
-// Proxy reverse geocoding to prevent browser CORS/403 issues with Nominatim
+// Approximate city lookup (rounds coordinates and never returns street-level address)
 app.get('/api/reverse-geocode', async (req: Request, res: Response) => {
   try {
-    const { lat, lon } = req.query;
-    if (!lat || !lon) {
-      return res.status(400).json({ error: 'lat and lon required' });
+    const latNum = Number(req.query.lat);
+    const lonNum = Number(req.query.lon);
+    if (
+      !Number.isFinite(latNum) ||
+      !Number.isFinite(lonNum) ||
+      latNum < -90 ||
+      latNum > 90 ||
+      lonNum < -180 ||
+      lonNum > 180
+    ) {
+      return res.status(400).json({ error: 'Valid coordinates required' });
     }
+    const approxLat = latNum.toFixed(2);
+    const approxLon = lonNum.toFixed(2);
     const osmRes = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=10`,
+      `https://nominatim.openstreetmap.org/reverse?lat=${approxLat}&lon=${approxLon}&format=json&zoom=10`,
       {
         headers: {
-          'User-Agent': 'AuraMayaAssistant/1.0 (contact: assistant@maya.local)',
+          'User-Agent': 'MayaCompanion/1.0 (local)',
           'Accept-Language': 'en',
         },
+        signal: AbortSignal.timeout(4000),
       }
     );
     if (!osmRes.ok) {
-      return res.json({ city: 'Local Tablet' });
+      return res.json({ city: 'Local Device' });
     }
     const data: any = await osmRes.json();
     const firstPart = data.display_name?.split(',')?.[0]?.trim();
@@ -91,14 +131,14 @@ app.get('/api/reverse-geocode', async (req: Request, res: Response) => {
       data.address?.county ||
       firstPart ||
       data.address?.state ||
-      'Local Tablet';
-    return res.json({ city, fullAddress: data.display_name });
+      'Local Device';
+    return res.json({ city });
   } catch {
-    return res.json({ city: 'Local Tablet' });
+    return res.json({ city: 'Local Device' });
   }
 });
 
-// Audio Transcription endpoint powered by Gemini 3.5 Transcribe
+// Audio transcription endpoint
 app.post('/api/transcribe', async (req: Request, res: Response) => {
   try {
     const { audioBase64, mimeType = 'audio/webm', lang = 'auto' } = req.body;
@@ -140,17 +180,16 @@ app.post('/api/transcribe', async (req: Request, res: Response) => {
     return res.json({
       success: Boolean(transcript),
       transcript,
-      model: 'gemini-3.5-transcribe',
     });
-  } catch (err: any) {
+  } catch {
     return res.status(500).json({
       success: false,
-      error: err?.message || 'Transcription failed',
+      error: 'Transcription unavailable right now',
     });
   }
 });
 
-// Human-quality AI voice synthesis endpoint powered by Gemini TTS with emotive speech styling
+// Natural expressive voice synthesis endpoint
 app.post('/api/tts', async (req: Request, res: Response) => {
   try {
     const { text, style: customStyle, voice = 'Kore', lang } = req.body;
@@ -250,7 +289,6 @@ app.post('/api/tts', async (req: Request, res: Response) => {
     ];
 
     let response: any = null;
-    let ttsModelUsed = 'gemini-3.8-flash-tts';
     let lastErrMsg = '';
 
     for (const attempt of attempts) {
@@ -259,15 +297,12 @@ app.post('/api/tts', async (req: Request, res: Response) => {
           buildTtsCall(attempt.client, attempt.model, attempt.meta),
           timeoutPromise,
         ]);
-        ttsModelUsed = attempt.model;
         if (response?.candidates?.[0]?.content?.parts?.some((p: any) => p.inlineData?.data)) {
           break;
         }
       } catch (err: any) {
         lastErrMsg = String(err?.message || err);
-        console.warn(`TTS attempt (${attempt.model}, meta=${attempt.meta}) failed:`, lastErrMsg.slice(0, 180));
         if (/429|RESOURCE_EXHAUSTED|quota|API_KEY_INVALID|MISSING_GEMINI_API_KEY/i.test(lastErrMsg)) {
-          // On hard quota/auth error on one model, still allow lite fallback once if primary was flash-tts
           if (attempt.model === 'gemini-3.8-flash-lite-tts') break;
         }
       }
@@ -280,20 +315,18 @@ app.post('/api/tts', async (req: Request, res: Response) => {
         success: true,
         audio: part.inlineData.data,
         mimeType: part.inlineData.mimeType || 'audio/wav',
-        style: emotiveStyle,
         voice: voiceName,
-        model: ttsModelUsed,
       });
     }
 
     return res.json({
       success: false,
-      error: lastErrMsg || 'No audio returned',
+      error: 'Speech synthesis unavailable',
     });
-  } catch (err: any) {
+  } catch {
     return res.json({
       success: false,
-      error: String(err?.message || 'TTS fallback to device synthesis'),
+      error: 'Speech fallback active',
     });
   }
 });
@@ -337,7 +370,7 @@ async function fetchLiveInternetNews(
         .replace(/\s+[-–—|]\s+[^-–—|]{2,60}$/, '')
         .trim();
       const rawLink = match[2]?.trim() || '';
-      if (rawTitle && !rawTitle.toLowerCase().includes('google news')) {
+      if (rawTitle && !rawTitle.toLowerCase().includes('google news') && isSafeHttpUrl(rawLink)) {
         items.push({ title: rawTitle, url: rawLink });
       }
       if (items.length >= 5) break;
@@ -356,14 +389,14 @@ const ROLE_INSTRUCTIONS: Record<string, string> = {
   companion:
     'You are Maya, an articulate, warmly expressive, emotionally intelligent life companion and personal assistant. Speak naturally as a trusted friend sharing the room.',
   research:
-    'You are Maya in Research & News Briefing mode. Use live Google Search grounding to verify real-time facts, current world news, weather, and answers, and present clear insights with your thoughtful reflection.',
+    'You are Maya in Research & News Briefing mode. Use live search to verify real-time facts, current world news, weather, and answers, and present clear insights with your thoughtful reflection.',
   coach:
     'You are Maya in Focus & Routine Coach mode. Help organize priorities calmly, suggest realistic next steps, encourage steady progress without pressure, and offer brief mindfulness prompts.',
   tutor:
     'You are Maya in Natural Language Tutor mode. Converse warmly in the target language, gently explain idioms or grammar if asked, and encourage confident natural expression.',
 };
 
-// Multi-turn chatbot endpoint powered by Gemini 4 Hydrogen, Search Grounding, and Fast Lite cascade
+// Multi-turn conversation endpoint
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
     const {
@@ -498,7 +531,6 @@ Allowed actions:
     let quotaExceeded = false;
     let apiError = false;
     let errorDetail = '';
-    let modelUsed = primaryModel;
 
     try {
       if (!process.env.GEMINI_API_KEY) {
@@ -517,12 +549,12 @@ Allowed actions:
           },
         });
 
-        const geminiCall = chat.sendMessage({ message: currentPrompt });
+        const chatCall = chat.sendMessage({ message: currentPrompt });
         const timeoutPromise = new Promise<{ text: string }>((_, reject) =>
           setTimeout(() => reject(new Error('TIMEOUT')), 22000)
         );
 
-        response = await Promise.race([geminiCall, timeoutPromise]);
+        response = await Promise.race([chatCall, timeoutPromise]);
       } catch (primaryErr: any) {
         const msg = String(primaryErr?.message || '');
         const isAuth =
@@ -533,7 +565,7 @@ Allowed actions:
           msg.includes('MISSING_GEMINI_API_KEY');
         if (isAuth) throw primaryErr;
 
-        // Cascade 1: try gemini-3.1-flash-lite with Google Search
+        // Fallback 1: lite model with live search
         try {
           const liteSearchChat = ai.chats.create({
             model: 'gemini-3.1-flash-lite',
@@ -550,9 +582,8 @@ Allowed actions:
           );
 
           response = await Promise.race([liteCall, liteTimeout]);
-          modelUsed = 'gemini-3.1-flash-lite';
         } catch {
-          // Cascade 2: try gemini-3.1-flash-lite directly without tools (preserves RSS news headlines in prompt)
+          // Fallback 2: lite model without external tools
           const plainChat = ai.chats.create({
             model: 'gemini-3.1-flash-lite',
             history: formattedHistory,
@@ -567,20 +598,19 @@ Allowed actions:
           );
 
           response = await Promise.race([plainCall, plainTimeout]);
-          modelUsed = 'gemini-3.1-flash-lite';
         }
       }
 
       fullText = response.text || '';
 
-      // Extract Google Search grounding chunks (stored quietly for logs; never spoken aloud)
+      // Extract sanitized web references (stored locally in logs; never spoken aloud)
       const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
       if (Array.isArray(chunks)) {
         sources = chunks
-          .filter((c: any) => Boolean(c?.web?.uri))
+          .filter((c: any) => isSafeHttpUrl(c?.web?.uri))
           .map((c: any) => ({
-            title: String(c.web.title || c.web.uri || 'Web Source'),
-            url: String(c.web.uri || ''),
+            title: String(c.web.title || 'Web Source'),
+            url: String(c.web.uri),
           }));
       }
       if (sources.length === 0 && backupSources.length > 0) {
@@ -588,7 +618,6 @@ Allowed actions:
       }
     } catch (apiErr: any) {
       const errMsg = String(apiErr?.message || '');
-      console.error('Gemini /api/chat error:', errMsg);
 
       const isQuota =
         apiErr?.status === 429 ||
@@ -611,12 +640,12 @@ Allowed actions:
       if (isQuota) quotaExceeded = true;
       apiError = true;
       errorDetail = isMissingKey
-        ? 'Gemini API key is missing or needs attention in Settings > Secrets.'
+        ? 'API key is missing or needs attention in server environment settings.'
         : isQuota
-        ? 'Gemini API quota limit reached — check billing/quota in Settings > Secrets.'
+        ? 'Service rate limit reached — please wait a moment and try again.'
         : isBusy
-        ? 'AI service is temporarily busy. Please try again in a moment.'
-        : 'Temporary AI connection issue. Please try again.';
+        ? 'Maya is momentarily busy. Please try again in a moment.'
+        : 'Temporary connection issue. Please try again.';
 
       const isSlovenian =
         userLanguage === 'sl-SI' ||
@@ -642,16 +671,16 @@ Allowed actions:
         apiError = false;
       } else if (isSlovenian) {
         fullText = isQuota || isMissingKey
-          ? `Trenutno ne morem dostopati do modela Gemini, ker je ključ API ali kvota v nastavitvah (Settings > Secrets) izčrpana ali manjka.`
+          ? `Storitev je trenutno dosegla omejitev zahtevkov. Počakaj trenutek in poskusi znova.`
           : `Trenutno je povezava s storitvijo začasno zasedena. Poskusi znova čez nekaj sekund.`;
       } else if (isGerman) {
         fullText = isQuota || isMissingKey
-          ? `Ich kann das Gemini-Modell gerade nicht erreichen, da der API-Schlüssel oder das Kontingent in Settings > Secrets fehlt oder erschöpft ist.`
+          ? `Das Anfragelimit wurde vorübergehend erreicht. Bitte warte einen Moment und versuche es erneut.`
           : `Der Dienst ist gerade kurz ausgelastet. Bitte versuche es in einem Moment noch einmal.`;
       } else {
         fullText = isQuota || isMissingKey
-          ? `I cannot reach the Gemini model right now because the API key or quota in Settings > Secrets is missing or exhausted.`
-          : `The AI service is briefly busy right now. Please try asking again in a moment.`;
+          ? `The request limit was temporarily reached. Please wait a moment and try again.`
+          : `The service is briefly busy right now. Please try asking again in a moment.`;
       }
     }
 
@@ -687,30 +716,29 @@ Allowed actions:
           : /ciao|grazie|tempo|compito|buongiorno|buonasera|notizie/i.test(cleanReply)
           ? 'it-IT'
           : 'en-US',
-      engine: modelUsed,
       sources,
       quotaExceeded,
       apiError,
       errorDetail,
     });
-  } catch (err: any) {
+  } catch {
     return res.status(500).json({
       reply: 'Temporary server error while talking to Maya. Please try again.',
       action: null,
       sources: [],
       quotaExceeded: false,
       apiError: true,
-      errorDetail: err?.message || 'Internal server error',
+      errorDetail: 'Internal server error',
     });
   }
 });
 
-// Daily Wish generator endpoint powered by Gemini 4 Hydrogen
+// Daily wish generator endpoint
 app.post('/api/wish', async (req: Request, res: Response) => {
   try {
     const { timeOfDay = 'morning', theme = 'life' } = req.body;
 
-    const geminiCall = ai.models.generateContent({
+    const wishCall = ai.models.generateContent({
       model: 'gemini-4-hydrogen',
       contents: `Provide an uplifting, deeply warm daily wish or mindful reflection for someone looking at their horizontal bedside/desk tablet during the ${timeOfDay}. Focus on ${theme}, inner peace, gentle momentum, or gratitude. Return 1 or 2 elegant, heartfelt sentences that feel like a real friend wrote it.`,
       config: {
@@ -723,7 +751,7 @@ app.post('/api/wish', async (req: Request, res: Response) => {
     );
 
     try {
-      const response = await Promise.race([geminiCall, timeoutPromise]);
+      const response = await Promise.race([wishCall, timeoutPromise]);
       return res.json({
         wish:
           response.text?.trim() ||
@@ -750,7 +778,7 @@ async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
   const server = http.createServer(app);
 
-  // Real-Time Gemini Live API WebSocket bridge (/live) using gemini-3.8-live
+  // Real-time audio WebSocket bridge (/live)
   const wss = new WebSocketServer({ noServer: true });
 
   let viteReady: Promise<any> | null = null;
@@ -830,7 +858,7 @@ async function startServer() {
       if (!process.env.GEMINI_API_KEY) {
         if (clientWs.readyState === clientWs.OPEN) {
           clientWs.send(
-            JSON.stringify({ error: 'Gemini API key is not configured in Secrets yet.' })
+            JSON.stringify({ error: 'Voice service key is not configured yet.' })
           );
           clientWs.close();
         }
@@ -884,9 +912,9 @@ ${userLang !== 'auto' ? `Speak in "${userLang}" unless ${userName} speaks to you
 
       const formatLiveError = (raw: string) => {
         if (/quota|billing|RESOURCE_EXHAUSTED|exceeded/i.test(raw)) {
-          return 'Gemini Live API quota exceeded — check your plan/billing in Settings > Secrets, or message Maya directly below.';
+          return 'Live streaming rate limit reached — switched to tap-to-talk Voice Turn.';
         }
-        return raw.replace(/https?:\/\/\S+/g, '').trim() || 'Could not start Live API session';
+        return raw.replace(/https?:\/\/\S+/g, '').trim() || 'Could not start live voice session';
       };
 
       const connectLiveUpstream = async (enableSearchTool: boolean) => {
@@ -932,25 +960,20 @@ ${userLang !== 'auto' ? `Speak in "${userLang}" unless ${userName} speaks to you
                 clientWs.send(JSON.stringify({ turnComplete: true }));
               }
             },
-            onerror: (err: any) => {
-              console.error('Gemini Live upstream onerror:', err?.message || err);
+            onerror: () => {
               if (sentReady && clientWs.readyState === clientWs.OPEN) {
                 clientWs.send(
-                  JSON.stringify({ error: formatLiveError(String(err?.message || '')) })
+                  JSON.stringify({ error: 'Live voice session interrupted.' })
                 );
               }
             },
             onclose: (ev?: any) => {
               const closeReason = ev?.reason ? String(ev.reason) : '';
-              const closeCode = ev?.code;
-              if (sentReady) {
-                console.warn('Gemini Live upstream closed:', closeCode, closeReason);
-                if (clientWs.readyState === clientWs.OPEN) {
-                  if (closeReason) {
-                    clientWs.send(JSON.stringify({ error: formatLiveError(closeReason) }));
-                  }
-                  clientWs.close();
+              if (sentReady && clientWs.readyState === clientWs.OPEN) {
+                if (closeReason) {
+                  clientWs.send(JSON.stringify({ error: formatLiveError(closeReason) }));
                 }
+                clientWs.close();
               }
             },
           },
@@ -966,7 +989,6 @@ ${userLang !== 'auto' ? `Speak in "${userLang}" unless ${userName} speaks to you
         if (/quota|billing|RESOURCE_EXHAUSTED|exceeded|API_KEY_INVALID|PERMISSION_DENIED/i.test(msg)) {
           throw toolErr;
         }
-        // Fallback: retry Live connection without Search tool if endpoint rejects search tool declaration
         connectedSession = await connectLiveUpstream(false);
       }
 
@@ -983,9 +1005,9 @@ ${userLang !== 'auto' ? `Speak in "${userLang}" unless ${userName} speaks to you
       sentReady = true;
       clientWs.send(JSON.stringify({ ready: true }));
     } catch (err: any) {
-      const raw = String(err?.message || 'Could not start Live API session');
+      const raw = String(err?.message || 'Could not start live voice session');
       const friendly = /quota|billing|RESOURCE_EXHAUSTED|exceeded/i.test(raw)
-        ? 'Gemini Live API quota exceeded — check your plan/billing in Settings > Secrets, or message Maya directly below.'
+        ? 'Live streaming rate limit reached — switched to tap-to-talk Voice Turn.'
         : raw.replace(/https?:\/\/\S+/g, '').trim();
       if (clientWs.readyState === clientWs.OPEN) {
         clientWs.send(JSON.stringify({ error: friendly }));

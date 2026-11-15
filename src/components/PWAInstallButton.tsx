@@ -55,9 +55,7 @@ export const PWAInstallButton: React.FC = () => {
   };
 
   const currentUrl =
-    typeof window !== 'undefined'
-      ? window.location.origin
-      : 'https://ais-pre-5tmrjifgewv7msa5cu7a4f-715881743066.europe-west2.run.app';
+    typeof window !== 'undefined' ? window.location.origin : '';
 
   return (
     <>
