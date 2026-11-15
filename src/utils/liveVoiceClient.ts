@@ -15,10 +15,27 @@ export interface LiveVoiceCallbacks {
   onError?: (message: string) => void;
 }
 
-function float32ToInt16Base64(float32: Float32Array): string {
-  const int16 = new Int16Array(float32.length);
-  for (let i = 0; i < float32.length; i++) {
-    const s = Math.max(-1, Math.min(1, float32[i]));
+function float32ToInt16Base64(float32: Float32Array, inputSampleRate = 16000): string {
+  const targetRate = 16000;
+  let samples = float32;
+
+  if (inputSampleRate > 0 && Math.abs(inputSampleRate - targetRate) > 100) {
+    const ratio = inputSampleRate / targetRate;
+    const newLength = Math.max(1, Math.round(float32.length / ratio));
+    const resampled = new Float32Array(newLength);
+    for (let i = 0; i < newLength; i++) {
+      const srcIdx = i * ratio;
+      const idx0 = Math.floor(srcIdx);
+      const idx1 = Math.min(float32.length - 1, idx0 + 1);
+      const frac = srcIdx - idx0;
+      resampled[i] = float32[idx0] * (1 - frac) + float32[idx1] * frac;
+    }
+    samples = resampled;
+  }
+
+  const int16 = new Int16Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
     int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
   const bytes = new Uint8Array(int16.buffer);
@@ -47,6 +64,7 @@ class LiveVoiceClient {
   private outputAnalyser: AnalyserNode | null = null;
   private micStream: MediaStream | null = null;
   private processor: ScriptProcessorNode | null = null;
+  private muteGainNode: GainNode | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private activeSources: Set<AudioBufferSourceNode> = new Set();
   private nextStartTime = 0;
@@ -64,8 +82,17 @@ class LiveVoiceClient {
     this.callbacks.onStateChange?.(next);
   }
 
+  public sendText(text: string): boolean {
+    const trimmed = text.trim();
+    if (!trimmed || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    this.ws.send(JSON.stringify({ text: trimmed }));
+    return true;
+  }
+
   public async connect(
-    params: { userName: string; lang: string; mode?: string },
+    params: { userName: string; lang: string; mode?: string; city?: string; weather?: string },
     callbacks: LiveVoiceCallbacks
   ): Promise<boolean> {
     if (this.state === 'connected' || this.state === 'connecting') {
@@ -86,7 +113,7 @@ class LiveVoiceClient {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 16000,
+          channelCount: 1,
         },
       });
 
@@ -114,6 +141,9 @@ class LiveVoiceClient {
         lang: params.lang || 'auto',
         mode: params.mode || 'standard',
       });
+      if (params.city) query.set('city', params.city);
+      if (params.weather) query.set('weather', params.weather);
+
       const ws = new WebSocket(`${protocol}//${window.location.host}/live?${query.toString()}`);
       this.ws = ws;
       let didOpen = false;
@@ -182,14 +212,20 @@ class LiveVoiceClient {
 
     this.sourceNode = this.inputAudioCtx.createMediaStreamSource(this.micStream);
     this.processor = this.inputAudioCtx.createScriptProcessor(4096, 1, 1);
+    // Zero-gain node keeps ScriptProcessor active without looping mic audio back to speakers
+    this.muteGainNode = this.inputAudioCtx.createGain();
+    this.muteGainNode.gain.value = 0;
 
     this.sourceNode.connect(this.processor);
-    this.processor.connect(this.inputAudioCtx.destination);
+    this.processor.connect(this.muteGainNode);
+    this.muteGainNode.connect(this.inputAudioCtx.destination);
+
+    const actualRate = this.inputAudioCtx.sampleRate || 16000;
 
     this.processor.onaudioprocess = (e) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
       const channelData = e.inputBuffer.getChannelData(0);
-      const base64 = float32ToInt16Base64(channelData);
+      const base64 = float32ToInt16Base64(channelData, actualRate);
       this.ws.send(JSON.stringify({ audio: base64 }));
     };
   }
@@ -291,6 +327,15 @@ class LiveVoiceClient {
         // ignore
       }
       this.processor = null;
+    }
+
+    if (this.muteGainNode) {
+      try {
+        this.muteGainNode.disconnect();
+      } catch {
+        // ignore
+      }
+      this.muteGainNode = null;
     }
 
     if (this.sourceNode) {

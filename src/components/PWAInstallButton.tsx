@@ -63,11 +63,11 @@ export const PWAInstallButton: React.FC = () => {
     <>
       <button
         onClick={handleInstallClick}
-        className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-all active:scale-95 whitespace-nowrap shrink-0 border border-sky-400/40 cursor-pointer"
+        className="flex items-center gap-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 px-3 py-1.5 text-xs font-medium text-sky-300 hover:text-white transition-colors whitespace-nowrap shrink-0 border border-slate-800 cursor-pointer"
         title="Install Maya on your Phone or Tablet"
       >
-        <Download className="w-3.5 h-3.5" />
-        <span>Install App</span>
+        <Download className="w-3.5 h-3.5 text-sky-400" />
+        <span>Install</span>
       </button>
 
       {showInstallModal && (

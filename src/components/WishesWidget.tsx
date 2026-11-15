@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, RefreshCw, Volume2 } from 'lucide-react';
+import { RefreshCw, Volume2 } from 'lucide-react';
 import { audioManager } from '../utils/audioHardwareManager';
 
 interface WishesWidgetProps {
@@ -45,33 +45,26 @@ export const WishesWidget: React.FC<WishesWidgetProps> = ({ isNightDim = false }
 
   return (
     <div
-      className={`rounded-2xl transition-all duration-300 px-3.5 py-2 border flex items-center justify-between gap-3 shrink-0 ${
+      className={`rounded-2xl transition-all duration-300 px-4 py-2.5 border flex items-center justify-between gap-3 shrink-0 ${
         isNightDim
           ? 'bg-slate-900/40 border-amber-950/40 text-amber-100/70'
-          : 'bg-slate-900/80 border-slate-800/80 text-slate-200 shadow-md backdrop-blur-md'
+          : 'bg-slate-900/65 border-slate-800/70 text-slate-200 backdrop-blur-md'
       }`}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex-shrink-0">
-          <Sparkles className="w-3.5 h-3.5" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/90 font-mono">
-              Daily Wish & Wisdom
-            </span>
-          </div>
-          <p className="text-xs text-slate-200 italic leading-snug truncate">
-            "{wish}"
-          </p>
-        </div>
+      <div className="min-w-0">
+        <span className="text-[11px] font-medium text-amber-300/90 block">
+          Daily Wish &amp; Wisdom
+        </span>
+        <p className="text-xs text-slate-200/95 italic leading-snug truncate mt-0.5">
+          &ldquo;{wish}&rdquo;
+        </p>
       </div>
 
       <div className="flex items-center gap-1 flex-shrink-0">
         <button
           onClick={handleSpeakWish}
-          className={`p-2 rounded-xl text-slate-400 hover:text-sky-300 hover:bg-slate-800 transition-colors ${
-            isSpeaking ? 'text-sky-400 animate-pulse' : ''
+          className={`p-2 rounded-xl text-slate-400 hover:text-sky-300 hover:bg-slate-800/80 transition-colors cursor-pointer ${
+            isSpeaking ? 'text-sky-400' : ''
           }`}
           title="Listen to Maya read this wish"
         >
@@ -81,7 +74,7 @@ export const WishesWidget: React.FC<WishesWidgetProps> = ({ isNightDim = false }
         <button
           onClick={fetchNewWish}
           disabled={isRefreshing}
-          className="p-2 rounded-xl text-slate-400 hover:text-amber-300 hover:bg-slate-800 transition-colors"
+          className="p-2 rounded-xl text-slate-400 hover:text-amber-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
           title="Get fresh daily wish"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />

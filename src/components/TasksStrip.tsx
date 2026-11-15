@@ -38,30 +38,29 @@ export const TasksStrip: React.FC<TasksStripProps> = ({
 
   return (
     <div
-      className={`rounded-2xl transition-all duration-300 flex flex-col ${
+      className={`rounded-2xl transition-all duration-300 flex flex-col h-full ${
         isNightDim
           ? 'bg-slate-900/50 border border-amber-950/40 text-amber-100/80'
-          : 'bg-slate-900/80 border border-slate-800/80 text-slate-100 shadow-xl backdrop-blur-md'
+          : 'bg-slate-900/65 border border-slate-800/70 text-slate-100 backdrop-blur-md'
       }`}
     >
       {/* Clean Header bar */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-800/50">
-        <div className="flex items-center gap-2.5">
-          <div className="w-2 h-2 rounded-full bg-sky-400" />
-          <h2 className="text-sm font-semibold tracking-wide text-slate-200 uppercase">
-            Tasks Strip
+      <div className="flex items-center justify-between px-4 pt-3.5 pb-3 border-b border-slate-800/60">
+        <div className="flex items-baseline gap-2.5">
+          <h2 className="text-sm font-semibold text-slate-100 font-display">
+            Tasks
           </h2>
-          <span className="text-xs font-mono text-slate-400">
-            {completedCount}/{tasks.length} Done
+          <span className="text-xs font-mono tabular-nums text-slate-400">
+            {completedCount}/{tasks.length} done
           </span>
         </div>
 
         <button
           onClick={() => setIsAdding(!isAdding)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 hover:bg-sky-500 text-white shadow-sm transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700/70 transition-colors cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>Add Task</span>
+          <span>Add</span>
         </button>
       </div>
 

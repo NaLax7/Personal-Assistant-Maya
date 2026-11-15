@@ -1,11 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Calendar,
   Plus,
-  Clock,
-  CheckCircle2,
-  ChevronRight,
-  MapPin,
   Trash2,
   Timer,
   Play,
@@ -116,67 +111,49 @@ export const ScheduleWidget: React.FC<ScheduleWidgetProps> = ({
 
   return (
     <div
-      className={`rounded-2xl transition-all duration-300 flex flex-col ${
+      className={`rounded-2xl transition-all duration-300 flex flex-col h-full ${
         isNightDim
           ? 'bg-slate-900/50 border border-amber-950/40 text-amber-100/70'
-          : 'bg-slate-900/80 border border-slate-800/80 text-slate-100 shadow-xl backdrop-blur-md'
+          : 'bg-slate-900/65 border border-slate-800/70 text-slate-100 backdrop-blur-md'
       }`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-slate-800/50">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-sky-400" />
-          <h2 className="text-xs font-semibold tracking-wider text-slate-200 uppercase">
-            Day Schedule
+      <div className="flex items-center justify-between px-4 pt-3.5 pb-3 border-b border-slate-800/60">
+        <div className="flex items-baseline gap-2.5">
+          <h2 className="text-sm font-semibold text-slate-100 font-display">
+            Schedule
           </h2>
-          <span className="text-[11px] text-slate-400 font-mono">
-            {events.length} Events
+          <span className="text-xs text-slate-400 font-mono tabular-nums">
+            {events.length} events
           </span>
         </div>
 
         <button
           onClick={() => setIsAdding(!isAdding)}
-          className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors border border-slate-700/60 cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 transition-colors border border-slate-700/70 cursor-pointer"
         >
-          <Plus className="w-3.5 h-3.5 text-sky-400" />
-          <span>New</span>
+          <Plus className="w-3.5 h-3.5" />
+          <span>Add</span>
         </button>
       </div>
 
-      {/* Pomodoro 25-Minute Focus Countdown Timer Strip */}
-      <div className="px-4 py-2 bg-slate-950/60 border-b border-slate-800/60 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div
-            className={`p-1.5 rounded-lg ${
-              isPomodoroRunning
-                ? 'bg-amber-500/20 text-amber-400 animate-pulse'
-                : 'bg-slate-800 text-slate-400'
-            }`}
-          >
-            <Timer className="w-3.5 h-3.5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold text-slate-300">
-                25m Pomodoro Focus
-              </span>
-              {isPomodoroRunning && (
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-              )}
-            </div>
-            <span className="text-xs font-mono font-bold text-amber-400 tracking-wider">
-              {formatPomodoroTime(pomodoroSeconds)}
-            </span>
-          </div>
+      {/* Compact Focus Timer Row */}
+      <div className="px-4 py-2 bg-slate-950/40 border-b border-slate-800/60 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <Timer className={`w-3.5 h-3.5 ${isPomodoroRunning ? 'text-amber-400' : 'text-slate-400'}`} />
+          <span className="text-xs text-slate-300">Focus timer</span>
+          <span className="text-xs font-mono font-semibold text-amber-300 tabular-nums">
+            {formatPomodoroTime(pomodoroSeconds)}
+          </span>
         </div>
 
         <div className="flex items-center gap-1.5">
           <button
             onClick={togglePomodoro}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
               isPomodoroRunning
                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
-                : 'bg-sky-600 hover:bg-sky-500 text-white'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/70'
             }`}
             title={isPomodoroRunning ? 'Pause Focus Timer' : 'Start 25m Focus Block'}
           >
@@ -194,7 +171,7 @@ export const ScheduleWidget: React.FC<ScheduleWidgetProps> = ({
           </button>
           <button
             onClick={resetPomodoro}
-            className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
             title="Reset to 25:00"
           >
             <RotateCcw className="w-3 h-3" />
@@ -202,25 +179,23 @@ export const ScheduleWidget: React.FC<ScheduleWidgetProps> = ({
         </div>
       </div>
 
-      {/* Break Time Alert Notification Modal/Banner */}
+      {/* Break Time Alert Banner */}
       {showBreakAlert && (
-        <div className="m-3 p-3 rounded-xl bg-gradient-to-r from-emerald-950 to-teal-950 border border-emerald-500/60 shadow-xl flex items-center justify-between gap-3 animate-bounce">
+        <div className="m-3 p-3 rounded-xl bg-emerald-950/70 border border-emerald-500/40 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300">
-              <Coffee className="w-4 h-4" />
-            </div>
+            <Coffee className="w-4 h-4 text-emerald-300 shrink-0" />
             <div>
-              <span className="text-xs font-bold text-emerald-200 block uppercase tracking-wider">
-                ☕ Break Time!
+              <span className="text-xs font-semibold text-emerald-200 block">
+                Focus session complete
               </span>
-              <p className="text-[11px] text-emerald-300 font-medium">
-                Great job! You finished 25 minutes of deep focus. Take a 5-minute stretch or coffee break.
+              <p className="text-[11px] text-emerald-300/90">
+                Take a calm 5-minute stretch or coffee break.
               </p>
             </div>
           </div>
           <button
             onClick={() => setShowBreakAlert(false)}
-            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shrink-0 cursor-pointer"
+            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg shrink-0 cursor-pointer"
           >
             Dismiss
           </button>

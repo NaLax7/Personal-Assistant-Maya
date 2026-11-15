@@ -38,6 +38,7 @@ class AudioHardwareManager {
   private currentLanguage = 'en-US';
   private handsFreeEnabled = true;
   private cachedVoices: SpeechSynthesisVoice[] = [];
+  private speakSeqId = 0;
 
   constructor() {
     this.setupGlobalUnlock();
@@ -158,6 +159,7 @@ class AudioHardwareManager {
         this.outputAnalyser = this.audioCtx.createAnalyser();
         this.outputAnalyser.fftSize = 256;
         this.outputAnalyser.smoothingTimeConstant = 0.72;
+        this.outputAnalyser.connect(this.audioCtx.destination);
       }
       return this.audioCtx;
     } catch {
@@ -487,6 +489,8 @@ class AudioHardwareManager {
   ): Promise<boolean> {
     this.stopSpeaking();
     this.stopRecognition();
+    this.unlockAudioContext();
+    const requestSeq = ++this.speakSeqId;
 
     const cleanText = text
       .replace(/```action[\s\S]*?```/g, '')
@@ -499,7 +503,7 @@ class AudioHardwareManager {
     }
 
     try {
-      // Step 1: Request natural human speech audio from Gemini TTS
+      // Step 1: Request natural human speech audio from Gemini 3.8 Flash TTS
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -510,8 +514,15 @@ class AudioHardwareManager {
         }),
       });
 
+      if (requestSeq !== this.speakSeqId) {
+        return false;
+      }
+
       if (res.ok) {
         const data = await res.json();
+        if (requestSeq !== this.speakSeqId) {
+          return false;
+        }
         if (data.success && data.audio) {
           const ctx = this.unlockAudioContext();
 
@@ -526,17 +537,20 @@ class AudioHardwareManager {
               }
 
               const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
+              if (requestSeq !== this.speakSeqId) {
+                return false;
+              }
 
               if (!this.outputAnalyser) {
                 this.outputAnalyser = ctx.createAnalyser();
                 this.outputAnalyser.fftSize = 256;
                 this.outputAnalyser.smoothingTimeConstant = 0.72;
+                this.outputAnalyser.connect(ctx.destination);
               }
 
               const sourceNode = ctx.createBufferSource();
               sourceNode.buffer = audioBuffer;
               sourceNode.connect(this.outputAnalyser);
-              this.outputAnalyser.connect(ctx.destination);
 
               this.currentBufferSource = sourceNode;
               this.isSpeaking = true;
@@ -730,6 +744,7 @@ class AudioHardwareManager {
   }
 
   public stopSpeaking() {
+    this.speakSeqId++;
     if (this.currentBufferSource) {
       try {
         this.currentBufferSource.stop();

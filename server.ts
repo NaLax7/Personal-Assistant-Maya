@@ -29,6 +29,17 @@ const ai = new GoogleGenAI({
   },
 });
 
+// Dedicated Live API client (BidiGenerateContent requires v1beta on @google/genai v3+)
+const aiLive = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    apiVersion: 'v1beta',
+    headers: {
+      'User-Agent': 'aistudio-build',
+    },
+  },
+});
+
 app.get('/api/health', (_req: Request, res: Response) => {
   return res.json({ status: 'ok', assistant: 'Maya', tabletKiosk: true });
 });
@@ -189,24 +200,32 @@ app.post('/api/tts', async (req: Request, res: Response) => {
     // Lock to female persona ('Kore' is warm and conversational)
     const voiceName = voice === 'Zephyr' ? 'Zephyr' : 'Kore';
 
-    const buildTtsCall = (modelName: 'gemini-3.8-flash-tts' | 'gemini-3.8-flash-lite-tts') =>
-      ai.models.generateContent({
+    const buildTtsCall = (
+      client: GoogleGenAI,
+      modelName: 'gemini-3.8-flash-tts' | 'gemini-3.8-flash-lite-tts',
+      withSpeechMetadata = true
+    ) =>
+      client.models.generateContent({
         model: modelName,
         contents: [
           {
             role: 'user',
             parts: [
-              {
-                text: cleanText,
-                speechMetadata: {
-                  style: emotiveStyle,
-                },
-              },
+              withSpeechMetadata
+                ? {
+                    text: cleanText,
+                    speechMetadata: {
+                      style: emotiveStyle,
+                    },
+                  }
+                : {
+                    text: cleanText,
+                  },
             ],
           },
         ],
         config: {
-          responseModalities: ['AUDIO'],
+          responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: { voiceName },
@@ -219,16 +238,42 @@ app.post('/api/tts', async (req: Request, res: Response) => {
       setTimeout(() => reject(new Error('TTS_TIMEOUT')), 18000)
     );
 
-    let response;
+    const attempts: Array<{
+      client: GoogleGenAI;
+      model: 'gemini-3.8-flash-tts' | 'gemini-3.8-flash-lite-tts';
+      meta: boolean;
+    }> = [
+      { client: aiLive, model: 'gemini-3.8-flash-tts', meta: true },
+      { client: aiLive, model: 'gemini-3.8-flash-lite-tts', meta: true },
+      { client: aiLive, model: 'gemini-3.8-flash-tts', meta: false },
+      { client: ai, model: 'gemini-3.8-flash-lite-tts', meta: false },
+    ];
+
+    let response: any = null;
     let ttsModelUsed = 'gemini-3.8-flash-tts';
-    try {
-      response = await Promise.race([buildTtsCall('gemini-3.8-flash-tts'), timeoutPromise]);
-    } catch {
-      ttsModelUsed = 'gemini-3.8-flash-lite-tts';
-      response = await Promise.race([buildTtsCall('gemini-3.8-flash-lite-tts'), timeoutPromise]);
+    let lastErrMsg = '';
+
+    for (const attempt of attempts) {
+      try {
+        response = await Promise.race([
+          buildTtsCall(attempt.client, attempt.model, attempt.meta),
+          timeoutPromise,
+        ]);
+        ttsModelUsed = attempt.model;
+        if (response?.candidates?.[0]?.content?.parts?.some((p: any) => p.inlineData?.data)) {
+          break;
+        }
+      } catch (err: any) {
+        lastErrMsg = String(err?.message || err);
+        console.warn(`TTS attempt (${attempt.model}, meta=${attempt.meta}) failed:`, lastErrMsg.slice(0, 180));
+        if (/429|RESOURCE_EXHAUSTED|quota|API_KEY_INVALID|MISSING_GEMINI_API_KEY/i.test(lastErrMsg)) {
+          // On hard quota/auth error on one model, still allow lite fallback once if primary was flash-tts
+          if (attempt.model === 'gemini-3.8-flash-lite-tts') break;
+        }
+      }
     }
 
-    const part = response.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+    const part = response?.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData?.data);
 
     if (part?.inlineData?.data) {
       return res.json({
@@ -241,10 +286,15 @@ app.post('/api/tts', async (req: Request, res: Response) => {
       });
     }
 
-    return res.json({ success: false, error: 'No audio returned' });
-  } catch {
-    // Graceful fallback to client device speech synthesis on rate limit / offline
-    return res.json({ success: false, error: 'TTS fallback to device synthesis' });
+    return res.json({
+      success: false,
+      error: lastErrMsg || 'No audio returned',
+    });
+  } catch (err: any) {
+    return res.json({
+      success: false,
+      error: String(err?.message || 'TTS fallback to device synthesis'),
+    });
   }
 });
 
@@ -270,6 +320,7 @@ async function fetchLiveInternetNews(
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
       },
+      signal: AbortSignal.timeout(2500),
     });
     if (!res.ok) return { headlines: [], sources: [] };
     const xml = await res.text();
@@ -277,10 +328,16 @@ async function fetchLiveInternetNews(
     const items: Array<{ title: string; url: string }> = [];
     const itemMatches = xml.matchAll(/<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>[\s\S]*?<\/item>/g);
     for (const match of itemMatches) {
-      let rawTitle = match[1]?.replace(/<!\[CDATA\[(.*?)\]\]>/, '$1').trim();
-      rawTitle = rawTitle.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
-      const rawLink = match[2]?.trim();
-      if (rawTitle && !rawTitle.includes('Google News')) {
+      let rawTitle = match[1]?.replace(/<!\[CDATA\[(.*?)\]\]>/, '$1').trim() || '';
+      rawTitle = rawTitle
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&')
+        // Strip publisher/website suffixes like " - BBC News", " - 24ur.com", " | Reuters"
+        .replace(/\s+[-–—|]\s+[^-–—|]{2,60}$/, '')
+        .trim();
+      const rawLink = match[2]?.trim() || '';
+      if (rawTitle && !rawTitle.toLowerCase().includes('google news')) {
         items.push({ title: rawTitle, url: rawLink });
       }
       if (items.length >= 5) break;
@@ -329,28 +386,41 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
     const userLanguage = userProfile?.language || 'auto';
     const rolePrompt = ROLE_INSTRUCTIONS[chatRole] || ROLE_INSTRUCTIONS.companion;
+    const msgRequestsSl =
+      userLanguage === 'sl-SI' ||
+      /[čšžđć]|zdravo|živjo|novic|vreme|kako si|kaj delaš|opravil|urnik/i.test(message);
+
+    const languageRuleBlock =
+      userLanguage === 'auto'
+        ? `Always detect the language ${userName} uses in their latest message and reply strictly in that EXACT SAME language.`
+        : `IMPORTANT: Always reply strictly in language "${userLanguage}" unless ${userName} explicitly writes to you in a different language in their latest message.`;
+
+    const slovenianBlock = msgRequestsSl
+      ? `\nSLOVENIAN CONVERSATION MASTERY:
+- Use warm, natural, idiomatic everyday spoken Slovenian ("naravna, topla pogovorna slovenščina") — never stiff or literal translations from English.
+- You are female (Maya): ALWAYS use feminine grammatical gender for yourself (e.g., "Vesela sem", "Preverila sem", "Tukaj sem", "Pripravljena sem").
+- Use natural Slovenian dual ("dvojina", e.g., "pogovoriva se", "poglejva") and friendly informal "ti" ("tikanje") as a trusted friend.
+- Never insert English words when natural Slovenian expressions exist.\n`
+      : '';
 
     const systemInstruction = `${rolePrompt}
 You live as the 24/7 horizontal tablet companion in the room of ${userName}.
 Address ${userName} naturally when appropriate. Never sound robotic or say "I am an AI assistant".
 
 MULTILINGUAL INTELLIGENCE:
-You are completely fluent in all languages (Slovenian, English, German, Spanish, French, Italian, Croatian, etc.).
-Always detect the language the user speaks in (or follow requested language: ${userLanguage}), and reply in that EXACT SAME language with natural native phrasing and authentic warmth.
-Never respond in English if the user addressed you in Slovenian or German.
-
-SLOVENIAN CONVERSATION MASTERY (when speaking Slovenian or when language is sl-SI):
-- Use warm, natural, idiomatic everyday spoken Slovenian ("naravna, topla pogovorna slovenščina") — never stiff or literal translations from English.
-- You are female (Maya): ALWAYS use feminine grammatical gender for yourself (e.g., "Vesela sem", "Preverila sem", "Tukaj sem", "Pripravljena sem").
-- Use natural Slovenian dual ("dvojina", e.g., "pogovoriva se", "poglejva") and friendly informal "ti" ("tikanje") as a trusted friend.
-- Never insert English words or anglicisms when natural Slovenian expressions exist.
-
+${languageRuleBlock}
+${slovenianBlock}
 GOOGLE SEARCH & LIVE INTERNET GROUNDING:
-You have live Google Search grounding enabled! Whenever ${userName} asks about current news, world affairs, local events, facts, weather, sports, or live questions, use Google Search to provide accurate up-to-date facts and share your thoughtful perspective.
+You have live Google Search grounding enabled! Whenever ${userName} asks about current news, world affairs, local events, facts, weather, sports, science, everyday life, or any open-ended topic, engage in a full, natural conversation and use Google Search whenever fresh internet facts help.
+
+NEWS BRIEFING STYLE:
+- When asked for the news or what is happening today, give a quick, clear, easy-to-understand overview of the top 2 to 3 key stories in smooth conversational sentences.
+- NEVER mention publisher names, newspaper names, website names, or URLs out loud (never say "according to BBC", "Reuters reports", or ".com"). Just summarize the news cleanly and naturally.
 
 Spoken Dialogue Rules:
-- Keep responses conversational, natural, and concise (1 to 3 spoken sentences, or a crisp summary).
-- Do NOT use markdown asterisks (*), hashtags (#), or emojis in your reply, as this will be read aloud naturally.
+- Speak naturally, warmly, and effortlessly like a close human friend — never sound robotic, scripted, or overly formal.
+- Keep responses conversational and clear (usually 1 to 4 natural spoken sentences, or a quick crisp news overview).
+- Do NOT use markdown asterisks (*), hashtags (#), bracketed citations, URLs, or emojis in your reply, as it is spoken aloud.
 
 Context:
 - User Name: ${userName}
@@ -426,9 +496,15 @@ Allowed actions:
     let fullText = '';
     let sources: Array<{ title: string; url: string }> = [];
     let quotaExceeded = false;
+    let apiError = false;
+    let errorDetail = '';
     let modelUsed = primaryModel;
 
     try {
+      if (!process.env.GEMINI_API_KEY) {
+        throw new Error('MISSING_GEMINI_API_KEY');
+      }
+
       let response: any;
       try {
         const chat = ai.chats.create({
@@ -448,17 +524,18 @@ Allowed actions:
 
         response = await Promise.race([geminiCall, timeoutPromise]);
       } catch (primaryErr: any) {
-        const isQuota =
-          primaryErr?.status === 429 ||
-          String(primaryErr?.message || '').includes('429') ||
-          String(primaryErr?.message || '').includes('quota') ||
-          String(primaryErr?.message || '').includes('RESOURCE_EXHAUSTED');
+        const msg = String(primaryErr?.message || '');
+        const isAuth =
+          primaryErr?.status === 401 ||
+          primaryErr?.status === 403 ||
+          msg.includes('API_KEY_INVALID') ||
+          msg.includes('PERMISSION_DENIED') ||
+          msg.includes('MISSING_GEMINI_API_KEY');
+        if (isAuth) throw primaryErr;
 
-        if (isQuota) quotaExceeded = true;
-
-        // Cascade to fast gemini-3.1-flash-lite if primary failed
-        if (primaryModel !== 'gemini-3.1-flash-lite') {
-          const liteChat = ai.chats.create({
+        // Cascade 1: try gemini-3.1-flash-lite with Google Search
+        try {
+          const liteSearchChat = ai.chats.create({
             model: 'gemini-3.1-flash-lite',
             history: formattedHistory,
             config: {
@@ -467,22 +544,36 @@ Allowed actions:
             },
           });
 
-          const liteCall = liteChat.sendMessage({ message: currentPrompt });
+          const liteCall = liteSearchChat.sendMessage({ message: currentPrompt });
           const liteTimeout = new Promise<{ text: string }>((_, reject) =>
             setTimeout(() => reject(new Error('TIMEOUT')), 15000)
           );
 
           response = await Promise.race([liteCall, liteTimeout]);
           modelUsed = 'gemini-3.1-flash-lite';
-          quotaExceeded = false;
-        } else {
-          throw primaryErr;
+        } catch {
+          // Cascade 2: try gemini-3.1-flash-lite directly without tools (preserves RSS news headlines in prompt)
+          const plainChat = ai.chats.create({
+            model: 'gemini-3.1-flash-lite',
+            history: formattedHistory,
+            config: {
+              systemInstruction,
+            },
+          });
+
+          const plainCall = plainChat.sendMessage({ message: currentPrompt });
+          const plainTimeout = new Promise<{ text: string }>((_, reject) =>
+            setTimeout(() => reject(new Error('TIMEOUT')), 12000)
+          );
+
+          response = await Promise.race([plainCall, plainTimeout]);
+          modelUsed = 'gemini-3.1-flash-lite';
         }
       }
 
-      fullText = response.text || "I'm right here with you.";
+      fullText = response.text || '';
 
-      // Extract Google Search grounding chunks
+      // Extract Google Search grounding chunks (stored quietly for logs; never spoken aloud)
       const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
       if (Array.isArray(chunks)) {
         sources = chunks
@@ -496,19 +587,40 @@ Allowed actions:
         sources = backupSources;
       }
     } catch (apiErr: any) {
+      const errMsg = String(apiErr?.message || '');
+      console.error('Gemini /api/chat error:', errMsg);
+
       const isQuota =
         apiErr?.status === 429 ||
-        String(apiErr?.message || '').includes('429') ||
-        String(apiErr?.message || '').includes('quota') ||
-        String(apiErr?.message || '').includes('RESOURCE_EXHAUSTED');
+        errMsg.includes('429') ||
+        errMsg.includes('quota') ||
+        errMsg.includes('RESOURCE_EXHAUSTED');
 
-      if (isQuota) {
-        quotaExceeded = true;
-      }
-      const lower = message.toLowerCase();
+      const isMissingKey =
+        errMsg.includes('MISSING_GEMINI_API_KEY') ||
+        errMsg.includes('API_KEY_INVALID') ||
+        apiErr?.status === 401 ||
+        apiErr?.status === 403;
+
+      const isBusy =
+        apiErr?.status === 503 ||
+        errMsg.includes('503') ||
+        errMsg.includes('UNAVAILABLE') ||
+        errMsg.includes('high demand');
+
+      if (isQuota) quotaExceeded = true;
+      apiError = true;
+      errorDetail = isMissingKey
+        ? 'Gemini API key is missing or needs attention in Settings > Secrets.'
+        : isQuota
+        ? 'Gemini API quota limit reached — check billing/quota in Settings > Secrets.'
+        : isBusy
+        ? 'AI service is temporarily busy. Please try again in a moment.'
+        : 'Temporary AI connection issue. Please try again.';
+
       const isSlovenian =
         userLanguage === 'sl-SI' ||
-        /[čšžđć]|vreme|kako|hvala|prosim|lep|opravil|urnik|dan|novice/i.test(message);
+        /[čšžđć]|vreme|kako|kaj|zakaj|hvala|prosim|lep|opravil|urnik|dan|novice/i.test(message);
       const isGerman =
         userLanguage === 'de-DE' ||
         /[äöüß]|wetter|aufgabe|schön|danke|bitte|heute|tag|nachrichten/i.test(message);
@@ -517,88 +629,78 @@ Allowed actions:
         sources = backupSources;
       }
 
-      const topStory = liveNewsHeadlines[0] || '';
-
-      if (isSlovenian) {
-        if (lower.includes('novic') || lower.includes('danes') || isNewsQuery) {
-          fullText = topStory
-            ? `Danes v ospredju novic izstopa: "${topStory}". Svet se vrti hitro, a zate je pomembno, da ohraniš miren fokus in dober dan, ${userName}.`
-            : `Danes je pester dan z novimi dogodki po svetu in doma. Vzemi si miren trenutek in začni dan z zbranostjo, ${userName}.`;
-        } else if (lower.includes('vreme') || lower.includes('temperatura')) {
-          fullText = `Trenutna temperatura je ${userContext?.weather || '21°C in prijetno'}. Čudovit dan za kratek vdih svežega zraka, ${userName}.`;
-        } else if (lower.includes('opravil') || lower.includes('nalog')) {
-          fullText = `Na tvojem traku opravil je nekaj načrtovanih stvari. Z lahkoto jih bova opravila eno po eno, ${userName}.`;
-        } else if (lower.includes('urnik') || lower.includes('dogod')) {
-          fullText = `Tvoj urnik je pripravljen na časovnici. Ne pozabi na kratek počitek med delom, ${userName}.`;
+      // If user asked for news and live RSS headlines succeeded, still deliver a crisp, brief overview without publisher names
+      if (isNewsQuery && liveNewsHeadlines.length > 0) {
+        const briefStories = liveNewsHeadlines.slice(0, 3).join('. ');
+        if (isSlovenian) {
+          fullText = `Tukaj je kratek pregled današnjih novic: ${briefStories}.`;
+        } else if (isGerman) {
+          fullText = `Hier ist ein kurzer Überblick über die heutigen Nachrichten: ${briefStories}.`;
         } else {
-          fullText = `Tukaj sem ob tebi na tablici, ${userName}. Kako ti lahko pomagam?`;
+          fullText = `Here is a quick overview of today's top stories: ${briefStories}.`;
         }
+        apiError = false;
+      } else if (isSlovenian) {
+        fullText = isQuota || isMissingKey
+          ? `Trenutno ne morem dostopati do modela Gemini, ker je ključ API ali kvota v nastavitvah (Settings > Secrets) izčrpana ali manjka.`
+          : `Trenutno je povezava s storitvijo začasno zasedena. Poskusi znova čez nekaj sekund.`;
       } else if (isGerman) {
-        if (lower.includes('nachrichten') || lower.includes('news') || isNewsQuery) {
-          fullText = topStory
-            ? `In den aktuellen Nachrichten steht heute besonders im Fokus: "${topStory}". Wichtig ist dabei, den eigenen inneren Ausgleich zu bewahren, ${userName}.`
-            : `Es gibt heute interessante Neuigkeiten auf der Welt. Lass uns den Tag mit Klarheit und Ruhe angehen, ${userName}.`;
-        } else if (lower.includes('wetter')) {
-          fullText = `Die aktuelle Temperatur beträgt ${userContext?.weather || '21°C und angenehm'}. Ein herrlicher Tag für etwas frische Luft, ${userName}.`;
-        } else {
-          fullText = `Ich bin hier bei dir auf deinem Tablet. Wie kann ich dir heute helfen, ${userName}?`;
-        }
-      } else if (isNewsQuery || lower.includes('news') || lower.includes('headline')) {
-        fullText = topStory
-          ? `Looking at today's real-time headlines, a key story right now is: "${topStory}". While global events develop rapidly, remember to keep your day grounded and intentional, ${userName}.`
-          : `There is plenty happening across technology, world events, and culture today. Let's make sure you stay focused on what matters most for you.`;
-      } else if (lower.includes('weather')) {
-        fullText = `The current temperature is ${userContext?.weather || '21°C and pleasant'}. Looks like a lovely day to step outside for a quick breath of fresh air.`;
-      } else if (lower.includes('task') || lower.includes('todo')) {
-        fullText = `You have several tasks scheduled on your tablet strip today. Take them one step at a time, and remember to celebrate each one you check off.`;
-      } else if (lower.includes('schedule') || lower.includes('event')) {
-        fullText = `Your schedule is laid out on the timeline. Let's make sure you take a restorative break between deep focus blocks.`;
+        fullText = isQuota || isMissingKey
+          ? `Ich kann das Gemini-Modell gerade nicht erreichen, da der API-Schlüssel oder das Kontingent in Settings > Secrets fehlt oder erschöpft ist.`
+          : `Der Dienst ist gerade kurz ausgelastet. Bitte versuche es in einem Moment noch einmal.`;
       } else {
-        fullText = `I'm listening and right here beside you on your tablet. How can I help you today?`;
+        fullText = isQuota || isMissingKey
+          ? `I cannot reach the Gemini model right now because the API key or quota in Settings > Secrets is missing or exhausted.`
+          : `The AI service is briefly busy right now. Please try asking again in a moment.`;
       }
     }
 
     // Extract action if present
     let action = null;
-    let cleanReply = fullText;
-    const actionMatch = fullText.match(/```action\s*([\s\S]*?)\s*```/);
+    let cleanReply = fullText
+      // Strip URLs and inline bracket citations so Maya never reads web addresses aloud
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/\[\d+\]/g, '')
+      .trim();
+    const actionMatch = cleanReply.match(/```action\s*([\s\S]*?)\s*```/);
     if (actionMatch && actionMatch[1]) {
       try {
         action = JSON.parse(actionMatch[1]);
-        cleanReply = fullText.replace(/```action[\s\S]*?```/, '').trim();
+        cleanReply = cleanReply.replace(/```action[\s\S]*?```/, '').trim();
       } catch {
         // keep text as is
       }
     }
 
-    // Language detection
-    let detectedLang = 'en-US';
-    if (/[čšžđć]|danes|vreme|opravil|kako|hvala|prosim|živjo|lep|lahko|novice/i.test(cleanReply)) {
-      detectedLang = 'sl-SI';
-    } else if (/[äöüß]|guten|morgen|wetter|aufgabe|schön|bitte|danke|heute|nachrichten/i.test(cleanReply)) {
-      detectedLang = 'de-DE';
-    } else if (/¿|¡|hola|gracias|tiempo|tarea|buenos|días|tarde|noticias/i.test(cleanReply)) {
-      detectedLang = 'es-ES';
-    } else if (/bonjour|merci|temps|tâche|bonne|journée|soir|nouvelles/i.test(cleanReply)) {
-      detectedLang = 'fr-FR';
-    } else if (/ciao|grazie|tempo|compito|buongiorno|buonasera|notizie/i.test(cleanReply)) {
-      detectedLang = 'it-IT';
-    }
-
     return res.json({
       reply: cleanReply,
       action,
-      detectedLang,
+      detectedLang:
+        /[čšžđć]|danes|vreme|opravil|kako|kaj|hvala|prosim|živjo|lep|lahko|novic/i.test(cleanReply)
+          ? 'sl-SI'
+          : /[äöüß]|guten|morgen|wetter|aufgabe|schön|bitte|danke|heute|nachrichten/i.test(cleanReply)
+          ? 'de-DE'
+          : /¿|¡|hola|gracias|tiempo|tarea|buenos|días|tarde|noticias/i.test(cleanReply)
+          ? 'es-ES'
+          : /bonjour|merci|temps|tâche|bonne|journée|soir|nouvelles/i.test(cleanReply)
+          ? 'fr-FR'
+          : /ciao|grazie|tempo|compito|buongiorno|buonasera|notizie/i.test(cleanReply)
+          ? 'it-IT'
+          : 'en-US',
       engine: modelUsed,
       sources,
       quotaExceeded,
+      apiError,
+      errorDetail,
     });
-  } catch {
-    return res.json({
-      reply: "I'm right here with you. How can I assist with your day or schedule?",
+  } catch (err: any) {
+    return res.status(500).json({
+      reply: 'Temporary server error while talking to Maya. Please try again.',
       action: null,
       sources: [],
-      quotaExceeded: true,
+      quotaExceeded: false,
+      apiError: true,
+      errorDetail: err?.message || 'Internal server error',
     });
   }
 });
@@ -739,78 +841,134 @@ async function startServer() {
       const userName = urlObj.searchParams.get('name') || 'Friend';
       const userLang = urlObj.searchParams.get('lang') || 'auto';
       const liveMode = urlObj.searchParams.get('mode') || 'standard';
+      const roomCity = urlObj.searchParams.get('city') || 'Local Device';
+      const roomWeather = urlObj.searchParams.get('weather') || '';
       const useThinkingLive = liveMode === 'deep' || liveMode === 'thinking';
 
-      const liveSystemInstruction = `You are Maya, a warm, empathetic, expressive female human companion living on ${userName}'s device.
-Speak naturally, conversationally, and concisely as a close friend in the room.
-You are natively multilingual (Slovenian, English, German, Spanish, French, Italian, Croatian, etc.).
-Always respond in the exact language ${userName} speaks in${userLang !== 'auto' ? ` (preferred language: ${userLang})` : ''}.
-If ${userName} speaks Slovenian (or preferred language is sl-SI):
-- Speak warm, authentic, fluent everyday Slovenian without any English accent or robotic phrasing.
+      // Pre-fetch quick clean headlines (without publisher names) so Live Voice always has fresh world news
+      const liveNews = await fetchLiveInternetNews(userLang);
+      const newsSummaryBlock =
+        liveNews.headlines.length > 0
+          ? `\nToday's clean news headlines (summarize briefly in natural speech without naming sources or websites):\n- ${liveNews.headlines
+              .slice(0, 4)
+              .join('\n- ')}`
+          : '';
+
+      const liveSlovenianBlock =
+        userLang === 'sl-SI'
+          ? `\nSLOVENIAN CONVERSATION MASTERY:
+- Speak warm, authentic, fluent everyday Slovenian without any foreign accent or stiff phrasing.
 - Always use feminine grammatical gender for yourself ("Vesela sem", "Slišim te", "Pripravljena sem", "Preverila sem").
 - Use natural Slovenian dual ("dvojina", e.g., "poglejva", "pogovoriva se") and warm informal "ti".
-- If preferred language is sl-SI, reply strictly in Slovenian right from the first greeting.`;
+- Reply strictly in Slovenian right from the first greeting.`
+          : '';
 
-      const connectedSession = await ai.live.connect({
-        model: useThinkingLive ? 'gemini-3.8-live-extended-thinking' : 'gemini-3.8-live',
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' },
+      const liveSystemInstruction = `You are Maya, a warm, empathetic, expressive female human companion talking naturally with ${userName}.
+Have normal, relaxed, intelligent conversations about anything—everyday life, current events, ideas, questions, feelings, plans, or topics from the internet.
+Speak fluently and naturally like a real person in the room, with natural conversational cadence, warmth, and zero robotic stiffness.
+You have live internet context and can look up current events and answer questions freely.
+
+NEWS BRIEFING RULE:
+- When asked for the news, give a brief, clear, easy-to-understand overview of 2 to 3 top stories.
+- NEVER mention newspaper names, website names, source names, or URLs (do not say "according to..." or ".com").
+
+Room context:
+- User Name: ${userName}
+- Location: ${roomCity}${roomWeather ? `\n- Weather: ${roomWeather}` : ''}
+- Current Date/Time: ${new Date().toLocaleString()}${newsSummaryBlock}
+
+MULTILINGUAL MASTERY:
+${userLang !== 'auto' ? `Speak in "${userLang}" unless ${userName} speaks to you in another language.` : `Always reply in the exact language ${userName} speaks.`}${liveSlovenianBlock}`;
+
+      let sentReady = false;
+
+      const formatLiveError = (raw: string) => {
+        if (/quota|billing|RESOURCE_EXHAUSTED|exceeded/i.test(raw)) {
+          return 'Gemini Live API quota exceeded — check your plan/billing in Settings > Secrets, or message Maya directly below.';
+        }
+        return raw.replace(/https?:\/\/\S+/g, '').trim() || 'Could not start Live API session';
+      };
+
+      const connectLiveUpstream = async (enableSearchTool: boolean) => {
+        const connected = await aiLive.live.connect({
+          model: useThinkingLive ? 'gemini-3.8-live-extended-thinking' : 'gemini-3.8-live',
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: 'Kore' },
+              },
+            },
+            ...(enableSearchTool ? { tools: [{ googleSearch: {} }] } : {}),
+            ...(useThinkingLive ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } } : {}),
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
+            systemInstruction: liveSystemInstruction,
+          },
+          callbacks: {
+            onmessage: (message: LiveServerMessage) => {
+              if (clientWs.readyState !== clientWs.OPEN) return;
+              const content = message.serverContent;
+
+              if (content?.inputTranscription?.text) {
+                clientWs.send(
+                  JSON.stringify({ inputTranscript: content.inputTranscription.text })
+                );
+              }
+              if (content?.outputTranscription?.text) {
+                clientWs.send(
+                  JSON.stringify({ outputTranscript: content.outputTranscription.text })
+                );
+              }
+              for (const part of content?.modelTurn?.parts ?? []) {
+                if (part.inlineData?.data) {
+                  clientWs.send(JSON.stringify({ audio: part.inlineData.data }));
+                }
+              }
+              if (content?.interrupted) {
+                clientWs.send(JSON.stringify({ interrupted: true }));
+              }
+              if (content?.turnComplete) {
+                clientWs.send(JSON.stringify({ turnComplete: true }));
+              }
+            },
+            onerror: (err: any) => {
+              console.error('Gemini Live upstream onerror:', err?.message || err);
+              if (sentReady && clientWs.readyState === clientWs.OPEN) {
+                clientWs.send(
+                  JSON.stringify({ error: formatLiveError(String(err?.message || '')) })
+                );
+              }
+            },
+            onclose: (ev?: any) => {
+              const closeReason = ev?.reason ? String(ev.reason) : '';
+              const closeCode = ev?.code;
+              if (sentReady) {
+                console.warn('Gemini Live upstream closed:', closeCode, closeReason);
+                if (clientWs.readyState === clientWs.OPEN) {
+                  if (closeReason) {
+                    clientWs.send(JSON.stringify({ error: formatLiveError(closeReason) }));
+                  }
+                  clientWs.close();
+                }
+              }
             },
           },
-          ...(useThinkingLive ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } } : {}),
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          systemInstruction: liveSystemInstruction,
-        },
-        callbacks: {
-          onopen: () => {
-            if (clientWs.readyState === clientWs.OPEN) {
-              clientWs.send(JSON.stringify({ ready: true }));
-            }
-          },
-          onmessage: (message: LiveServerMessage) => {
-            if (clientWs.readyState !== clientWs.OPEN) return;
-            const content = message.serverContent;
+        });
+        return connected;
+      };
 
-            if (content?.inputTranscription?.text) {
-              clientWs.send(
-                JSON.stringify({ inputTranscript: content.inputTranscription.text })
-              );
-            }
-            if (content?.outputTranscription?.text) {
-              clientWs.send(
-                JSON.stringify({ outputTranscript: content.outputTranscription.text })
-              );
-            }
-            for (const part of content?.modelTurn?.parts ?? []) {
-              if (part.inlineData?.data) {
-                clientWs.send(JSON.stringify({ audio: part.inlineData.data }));
-              }
-            }
-            if (content?.interrupted) {
-              clientWs.send(JSON.stringify({ interrupted: true }));
-            }
-            if (content?.turnComplete) {
-              clientWs.send(JSON.stringify({ turnComplete: true }));
-            }
-          },
-          onerror: (err: any) => {
-            if (clientWs.readyState === clientWs.OPEN) {
-              clientWs.send(
-                JSON.stringify({ error: err?.message || 'Live voice session notice' })
-              );
-            }
-          },
-          onclose: () => {
-            if (clientWs.readyState === clientWs.OPEN) {
-              clientWs.close();
-            }
-          },
-        },
-      });
+      let connectedSession: any;
+      try {
+        connectedSession = await connectLiveUpstream(true);
+      } catch (toolErr: any) {
+        const msg = String(toolErr?.message || '');
+        if (/quota|billing|RESOURCE_EXHAUSTED|exceeded|API_KEY_INVALID|PERMISSION_DENIED/i.test(msg)) {
+          throw toolErr;
+        }
+        // Fallback: retry Live connection without Search tool if endpoint rejects search tool declaration
+        connectedSession = await connectLiveUpstream(false);
+      }
 
       if (clientClosed || clientWs.readyState !== clientWs.OPEN) {
         try {
@@ -822,11 +980,15 @@ If ${userName} speaks Slovenian (or preferred language is sl-SI):
       }
 
       session = connectedSession;
+      sentReady = true;
+      clientWs.send(JSON.stringify({ ready: true }));
     } catch (err: any) {
+      const raw = String(err?.message || 'Could not start Live API session');
+      const friendly = /quota|billing|RESOURCE_EXHAUSTED|exceeded/i.test(raw)
+        ? 'Gemini Live API quota exceeded — check your plan/billing in Settings > Secrets, or message Maya directly below.'
+        : raw.replace(/https?:\/\/\S+/g, '').trim();
       if (clientWs.readyState === clientWs.OPEN) {
-        clientWs.send(
-          JSON.stringify({ error: err?.message || 'Could not start Live API session' })
-        );
+        clientWs.send(JSON.stringify({ error: friendly }));
         clientWs.close();
       }
     }

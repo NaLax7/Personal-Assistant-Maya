@@ -16,15 +16,12 @@ import { AcousticSleepOverlay } from './components/AcousticSleepOverlay';
 import { detectTabletLocation, fetchLiveWeather, TabletLocation } from './utils/locationWeather';
 import { tabletVoiceSensor, UserProfile } from './utils/voiceSensor';
 import { acousticWakeEngine } from './utils/acousticWakeEngine';
-import { audioManager } from './utils/audioHardwareManager';
-import { ConversationLogsModal } from './components/ConversationLogsModal';
-import { Moon, Sun, Settings, MessageSquare, Clock, LayoutGrid, Mic, WifiOff } from 'lucide-react';
+import { Moon, Sun, Clock, LayoutGrid, WifiOff } from 'lucide-react';
 
 export default function App() {
   // User Profile with Voice Sensor integration
   const [userProfile, setUserProfile] = useState<UserProfile>(() => tabletVoiceSensor.getStoredProfile());
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
 
   // View Mode: 'planner' (Full Tasks & Schedule + Clock + Maya) or 'clock' (Only Hour, Time, Date + Maya)
   const [viewMode, setViewMode] = useState<'planner' | 'clock'>(() => {
@@ -237,11 +234,6 @@ export default function App() {
     setWeather(newWeather);
   };
 
-  const [micStatus, setMicStatus] = useState<string>('idle');
-  useEffect(() => {
-    return audioManager.subscribeMicStatus((status) => setMicStatus(status));
-  }, []);
-
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
@@ -261,86 +253,62 @@ export default function App() {
       className={`min-h-screen md:h-screen w-full transition-colors duration-500 overflow-x-hidden overflow-y-auto md:overflow-hidden flex flex-col ${
         isNightDim
           ? 'bg-black text-amber-100/90'
-          : 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100'
+          : 'bg-[#060913] text-slate-100'
       }`}
       style={{
         filter: isNightDim ? 'brightness(0.65) contrast(0.95)' : 'none',
       }}
     >
-      {/* Streamlined Responsive Header (Phones + Huawei MediaPad T3 1280x800) */}
-      <header className="flex items-center justify-between gap-2 sm:gap-4 px-2.5 sm:px-4 py-2 border-b border-slate-800/60 bg-slate-950/90 backdrop-blur-md shrink-0 z-30">
-        {/* Zone 1: Single-line Brand */}
-        <div className="flex items-center gap-2 shrink-0">
+      {/* Streamlined, Uncluttered Header (3 Balanced Zones) */}
+      <header className="flex items-center justify-between gap-3 px-4 sm:px-5 py-2.5 border-b border-slate-800/60 bg-[#070b15]/90 backdrop-blur-md shrink-0 z-30">
+        {/* Left: Calm Identity */}
+        <div className="flex items-center gap-2.5 shrink-0">
           <img
             src="/tablet-icon.jpg"
             alt="Maya emblem"
             className="w-7 h-7 rounded-lg object-cover border border-slate-700/70"
           />
-          <span className="hidden sm:inline text-base font-bold tracking-tight text-white font-display whitespace-nowrap">
+          <span className="hidden sm:inline text-base font-semibold tracking-tight text-white font-display whitespace-nowrap">
             Maya
           </span>
         </div>
 
-        {/* Zone 2: Clean Mode Switcher (Put Tasks & Schedule Away <-> Full Planner) */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div
-            className="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-xl"
-            role="tablist"
-            aria-label="Display Mode"
+        {/* Center: View Mode Switcher */}
+        <div
+          className="flex items-center gap-1 p-1 bg-slate-900/90 border border-slate-800/80 rounded-xl"
+          role="tablist"
+          aria-label="Display Mode"
+        >
+          <button
+            onClick={() => handleSetViewMode('clock')}
+            className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              viewMode === 'clock'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-slate-300 hover:text-white'
+            }`}
+            title="Show only Clock, Date & Maya"
           >
-            <button
-              onClick={() => handleSetViewMode('clock')}
-              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                viewMode === 'clock'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-              title="Hide Tasks & Schedule — Show only Hour, Time, Date & Maya"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span className="sm:hidden">Clock</span>
-              <span className="hidden sm:inline">Clock &amp; Maya</span>
-            </button>
-            <button
-              onClick={() => handleSetViewMode('planner')}
-              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                viewMode === 'planner'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-              title="Show Tasks Strip, Daily Schedule, Daily Wish & Maya"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span className="sm:hidden">Tasks</span>
-              <span className="hidden sm:inline">Tasks &amp; Schedule</span>
-            </button>
-          </div>
-
-          {micStatus !== 'active' && (
-            <button
-              onClick={() => {
-                audioManager.requestMicrophone();
-                audioManager.startRecognition();
-              }}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-200 text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer transition-colors"
-            >
-              <Mic className="w-3.5 h-3.5" />
-              <span>Enable Hands-Free</span>
-            </button>
-          )}
+            <Clock className="w-3.5 h-3.5" />
+            <span className="sm:hidden">Clock</span>
+            <span className="hidden sm:inline">Clock &amp; Maya</span>
+          </button>
+          <button
+            onClick={() => handleSetViewMode('planner')}
+            className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              viewMode === 'planner'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-slate-300 hover:text-white'
+            }`}
+            title="Show Daily Planner, Schedule & Maya"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span className="sm:hidden">Tasks</span>
+            <span className="hidden sm:inline">Tasks &amp; Schedule</span>
+          </button>
         </div>
 
-        {/* Zone 3: Phone & Tablet Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <button
-            onClick={() => setIsLogsModalOpen(true)}
-            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl border bg-slate-900 border-slate-800 hover:border-sky-500/50 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-medium whitespace-nowrap"
-            title="Conversation Logs & Search Sources"
-          >
-            <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden sm:inline">Logs</span>
-          </button>
-
+        {/* Right: Install & Night Dim (No redundant Settings gear) */}
+        <div className="flex items-center gap-2 shrink-0">
           <PWAInstallButton />
 
           <button
@@ -348,19 +316,11 @@ export default function App() {
             className={`p-2 rounded-xl border transition-colors cursor-pointer ${
               isNightDim
                 ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
-                : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
+                : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
             title={isNightDim ? 'Disable Night Dim' : 'Enable Night Dim'}
           >
             {isNightDim ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-300" />}
-          </button>
-
-          <button
-            onClick={() => setIsProfileModalOpen(true)}
-            className="p-2 rounded-xl border bg-slate-900 border-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
-            title="User Profile & Settings"
-          >
-            <Settings className="w-4 h-4" />
           </button>
         </div>
       </header>
@@ -398,14 +358,14 @@ export default function App() {
           </div>
         </main>
       ) : (
-        <main className="flex-1 p-2 sm:p-2.5 md:overflow-hidden grid grid-cols-1 md:grid-cols-12 gap-2.5 items-stretch w-full max-w-[1920px] mx-auto min-h-0">
+        <main className="flex-1 p-3 sm:p-3.5 md:overflow-hidden grid grid-cols-1 md:grid-cols-12 gap-3.5 items-stretch w-full max-w-[1920px] mx-auto min-h-0">
           {/* Planner Left Column: 2nd on phone, 1st on tablet/desktop */}
-          <div className="order-2 md:order-1 md:col-span-7 flex flex-col gap-2 md:h-full md:overflow-hidden min-h-0">
+          <div className="order-2 md:order-1 md:col-span-7 flex flex-col gap-3 md:h-full md:overflow-hidden min-h-0">
             <WatchWidget weather={weather} isNightDim={isNightDim} variant="compact" />
 
             <WishesWidget isNightDim={isNightDim} />
 
-            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-2 md:overflow-hidden">
+            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-3 md:overflow-hidden">
               <div className="md:h-full md:overflow-hidden flex flex-col min-h-0">
                 <TasksStrip
                   tasks={tasks}
@@ -467,13 +427,6 @@ export default function App() {
         liveDb={liveDb}
         isVoiceDetected={isVoiceActive}
         userName={userProfile.name}
-      />
-
-      {/* Conversation History & Tablet Logs Modal */}
-      <ConversationLogsModal
-        isOpen={isLogsModalOpen}
-        onClose={() => setIsLogsModalOpen(false)}
-        isNightDim={isNightDim}
       />
 
       {/* Offline Connectivity Indicator */}

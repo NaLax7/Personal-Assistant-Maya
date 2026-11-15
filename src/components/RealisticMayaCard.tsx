@@ -4,28 +4,22 @@ import {
   Volume2,
   VolumeX,
   Send,
-  Check,
-  Settings,
   Square,
   CheckCircle2,
   Trash2,
-  Bot,
   Activity,
   Timer,
   Globe,
   ExternalLink,
-  Radio,
   Sparkles,
-  AudioLines,
   Loader2,
-  ChevronDown,
+  History,
 } from 'lucide-react';
 import { Task, ScheduleEvent, WeatherData } from '../types/assistant';
 import { UserProfile, tabletVoiceSensor } from '../utils/voiceSensor';
 import { TabletLocation } from '../utils/locationWeather';
 import {
   audioManager,
-  MicStatus,
   AudioFrequencyData,
 } from '../utils/audioHardwareManager';
 import { liveVoiceClient, LiveConnectionState } from '../utils/liveVoiceClient';
@@ -34,30 +28,6 @@ import { ConversationLogsModal } from './ConversationLogsModal';
 
 // Single, permanent, photorealistic portrait of Maya smiling warmly with her whole face visible
 const MAYA_SMILING_PHOTO = '/src/assets/images/companion_maya_1793524129665.jpg';
-
-export const SUPPORTED_LANGUAGES = [
-  { code: 'auto', label: 'Auto Detect (Any Language)', flag: '🌐' },
-  { code: 'en-US', label: 'English (US/UK)', flag: '🇬🇧' },
-  { code: 'sl-SI', label: 'Slovenščina (Slovenian)', flag: '🇸🇮' },
-  { code: 'de-DE', label: 'Deutsch (German)', flag: '🇩🇪' },
-  { code: 'es-ES', label: 'Español (Spanish)', flag: '🇪🇸' },
-  { code: 'fr-FR', label: 'Français (French)', flag: '🇫🇷' },
-  { code: 'it-IT', label: 'Italiano (Italian)', flag: '🇮🇹' },
-  { code: 'hr-HR', label: 'Hrvatski (Croatian)', flag: '🇭🇷' },
-];
-
-export const CHAT_ROLES = [
-  { id: 'companion', label: 'Companion', desc: 'Warm daily assistant' },
-  { id: 'research', label: 'Search & News', desc: 'Live Google Search grounding' },
-  { id: 'coach', label: 'Focus Coach', desc: 'Routines & calm planning' },
-  { id: 'tutor', label: 'Language Tutor', desc: 'Multilingual conversation' },
-] as const;
-
-export const CHAT_SPEEDS = [
-  { id: 'general', label: 'Hydrogen · Search', desc: 'gemini-4-hydrogen (MEDIUM + Search)' },
-  { id: 'deep', label: 'Deep Reasoning', desc: 'gemini-4-hydrogen (XHIGH) + Live Thinking' },
-  { id: 'fast', label: 'Fast Lite', desc: 'gemini-3.1-flash-lite' },
-] as const;
 
 interface ChatMessage {
   id: string;
@@ -105,18 +75,11 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
   isNightDim = false,
   layoutMode = 'full',
 }) => {
-  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
-  const [showModePicker, setShowModePicker] = useState(false);
-
-  // Selected language, chatbot role, and model speed
+  // Seamless multilingual detection (auto-adapts to Slovenian, English, German, etc.)
   const currentLangCode = userProfile.language || 'auto';
-  const [chatRole, setChatRole] = useState<string>('companion');
-  const [chatSpeed, setChatSpeed] = useState<string>('general');
-
-  // Hands-free ambient listening state
-  const [handsFreeMode, setHandsFreeMode] = useState<boolean>(() => {
-    return localStorage.getItem('maya_hands_free_listening') !== 'false';
-  });
+  const chatRole = 'companion';
+  const chatSpeed = 'general';
+  const handsFreeMode = true;
 
   // Conversation & Wake-word State
   const [isAwake, setIsAwake] = useState(false);
@@ -127,10 +90,12 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const [quotaNotice, setQuotaNotice] = useState(false);
+  const [apiErrorNotice, setApiErrorNotice] = useState('');
 
-  // Gemini 3.8 Live API Voice Session state
+  // Gemini 3.8 Live API Voice Session state + seamless Voice Turn fallback
   const [liveState, setLiveState] = useState<LiveConnectionState>('disconnected');
   const [liveSpeaking, setLiveSpeaking] = useState(false);
+  const [liveQuotaUnavailable, setLiveQuotaUnavailable] = useState(false);
   const [liveAmplitude, setLiveAmplitude] = useState<{
     rms: number;
     bands: number[];
@@ -139,14 +104,13 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
   const liveInputBufferRef = useRef<string>('');
   const liveOutputBufferRef = useRef<string>('');
 
-  // Gemini 3.5 Transcribe Audio Memo state
+  // Gemini 3.5 Transcribe + Gemini 3.8 Flash TTS Voice Turn state
   const [isRecordingMemo, setIsRecordingMemo] = useState(false);
   const [isTranscribingMemo, setIsTranscribingMemo] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
 
   // Hardware Audio Manager States
-  const [micStatus, setMicStatus] = useState<MicStatus>('idle');
   const [audioData, setAudioData] = useState<AudioFrequencyData>({
     db: 35,
     rms: 0.05,
@@ -167,7 +131,10 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     {
       id: 'welcome-1',
       sender: 'assistant',
-      text: `Hello ${userProfile.name}! I am Maya. Tap Live Voice for real-time conversation, record a voice note, or say "Maya..." anytime.`,
+      text:
+        userProfile.language === 'sl-SI'
+          ? `Živjo ${userProfile.name}! Jaz sem Maya. Tapni Talk ali moj portret za naraven pogovor v živo, ali pa mi napiši sporočilo spodaj.`
+          : `Hello ${userProfile.name}! I am Maya. Tap Talk or tap my portrait for natural real-time conversation, or message me below.`,
     },
   ]);
 
@@ -511,6 +478,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
   // Send multi-turn message to Gemini (/api/chat)
   const sendMessage = useCallback(
     async (textToSend?: string) => {
+      audioManager.unlockAudioContext();
       const message = (textToSend || inputText).trim();
       if (!message || isLoading) return;
 
@@ -539,6 +507,11 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
         tabletVoiceSensor.saveProfile(updated);
       }
 
+      // If Gemini 3.8 Live Voice is active, send typed/quick prompts straight into the live human voice session
+      if (liveState === 'connected' && liveVoiceClient.sendText(message)) {
+        return;
+      }
+
       const instantResult = handleInstantIntent(message);
       if (instantResult.handled) {
         if (instantResult.reply) {
@@ -564,6 +537,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
       }
 
       setIsLoading(true);
+      setApiErrorNotice('');
 
       try {
         const now = new Date();
@@ -599,10 +573,19 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
         });
 
         const data = await res.json();
-        const reply = data.reply || `I'm right here with you, ${userProfile.name}.`;
+        if (!res.ok && !data?.reply) {
+          throw new Error(data?.error || `HTTP ${res.status}`);
+        }
+
+        const reply =
+          data.reply ||
+          (currentLangCode === 'sl-SI'
+            ? `Tukaj sem, ${userProfile.name}. O čem bi se pogovorila?`
+            : `I'm right here, ${userProfile.name}. What would you like to talk about?`);
         const detectedLang = data.detectedLang;
         const sources: Array<{ title: string; url: string }> = data.sources || [];
         setQuotaNotice(Boolean(data.quotaExceeded));
+        setApiErrorNotice(data.apiError ? data.errorDetail || 'Gemini connection issue' : '');
 
         conversationStorage.addEntry({
           sender: 'assistant',
@@ -650,18 +633,23 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
         if (voiceEnabled) {
           speakText(reply, detectedLang);
         }
-      } catch {
-        const fallback = `I'm listening and right here beside you, ${userProfile.name}. How can I help you today?`;
+      } catch (err: any) {
+        const errMsg = err?.message || 'Unable to reach Maya server';
+        setApiErrorNotice(errMsg);
+        const errorReply =
+          currentLangCode === 'sl-SI'
+            ? `Trenutno ni povezave s strežnikom (${errMsg}). Preveri Wi-Fi povezavo in poskusi znova.`
+            : `I couldn't reach Maya's server right now (${errMsg}). Please check your connection and try again.`;
         conversationStorage.addEntry({
           sender: 'assistant',
-          text: fallback,
+          text: errorReply,
           language: currentLangCode,
         });
         setChatHistory((prev) => [
           ...prev,
-          { id: `a-${Date.now()}`, sender: 'assistant', text: fallback },
+          { id: `a-${Date.now()}`, sender: 'assistant', text: errorReply },
         ]);
-        if (voiceEnabled) speakText(fallback);
+        if (voiceEnabled) speakText(errorReply, currentLangCode);
       } finally {
         setIsLoading(false);
       }
@@ -685,6 +673,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
       onAddTask,
       onAddEvent,
       currentLangCode,
+      liveState,
     ]
   );
 
@@ -702,9 +691,16 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     audioManager.stopRecognition();
     liveInputBufferRef.current = '';
     liveOutputBufferRef.current = '';
+    setApiErrorNotice('');
 
     await liveVoiceClient.connect(
-      { userName: userProfile.name, lang: currentLangCode, mode: chatSpeed },
+      {
+        userName: userProfile.name,
+        lang: currentLangCode,
+        mode: chatSpeed,
+        city: location.city,
+        weather: `${weather.temp}°C, ${weather.condition}`,
+      },
       {
         onStateChange: (state) => {
           setLiveState(state);
@@ -763,16 +759,32 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
           }
         },
         onError: (msg) => {
+          const isLiveQuota = /quota|billing|RESOURCE_EXHAUSTED|exceeded/i.test(msg);
+          if (isLiveQuota) {
+            setLiveQuotaUnavailable(true);
+          }
+          setApiErrorNotice(msg);
           setGestureFeedback({
-            title: 'Live Voice Notice',
-            subtitle: msg,
+            title: isLiveQuota ? 'Switched to Voice Turn' : 'Live Voice Notice',
+            subtitle: isLiveQuota
+              ? 'Tap Talk anytime to speak naturally with Maya.'
+              : msg,
             type: 'silenced',
           });
-          setTimeout(() => setGestureFeedback(null), 3000);
+          setTimeout(() => setGestureFeedback(null), 3200);
         },
       }
     );
-  }, [liveState, userProfile.name, currentLangCode, handsFreeMode]);
+  }, [
+    liveState,
+    userProfile.name,
+    currentLangCode,
+    chatSpeed,
+    location.city,
+    weather.temp,
+    weather.condition,
+    handsFreeMode,
+  ]);
 
   // Toggle Voice Memo Recording + Gemini 3.5 Transcribe
   const toggleTranscribeMemo = useCallback(async () => {
@@ -865,49 +877,12 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
       });
       setTimeout(() => setGestureFeedback(null), 2400);
     }
-  }, [isRecordingMemo, handsFreeMode, sendMessage]);
-
-  // Manual Trigger to Wake Maya ("Maya ...")
-  const wakeMayaManually = useCallback(() => {
-    audioManager.playAcousticChime('wake');
-    setIsAwake(true);
-    isAwakeRef.current = true;
-    setSecondsRemaining(5);
-    pendingQueryRef.current = '';
-    audioManager.requestMicrophone();
-
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    countdownIntervalRef.current = setInterval(() => {
-      setSecondsRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(countdownIntervalRef.current);
-          if (pendingQueryRef.current.trim().length > 1) {
-            sendMessage(pendingQueryRef.current.trim());
-          }
-          setIsAwake(false);
-          isAwakeRef.current = false;
-          return 5;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    setGestureFeedback({
-      title: 'Maya Listening',
-      subtitle: "Speak now or say 'Maya stop'",
-      type: 'greet',
-    });
-    setTimeout(() => setGestureFeedback(null), 1800);
-  }, [sendMessage]);
+  }, [isRecordingMemo, handsFreeMode, sendMessage, currentLangCode]);
 
   // SPEECH RECOGNITION & 5-SECOND SILENCE LISTENER
   useEffect(() => {
     audioManager.setLanguage(currentLangCode);
     audioManager.setHandsFree(handsFreeMode);
-
-    const unsubMic = audioManager.subscribeMicStatus((status) => {
-      setMicStatus(status);
-    });
 
     const unsubAudio = audioManager.subscribeAudioData((data) => {
       setAudioData(data);
@@ -1023,7 +998,6 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     });
 
     return () => {
-      unsubMic();
       unsubAudio();
       unsubTranscript();
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
@@ -1031,15 +1005,19 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     };
   }, [handsFreeMode, currentLangCode, sendMessage, speakText, stopSpeaking, userProfile.name, liveState]);
 
-  const toggleHandsFree = () => {
-    const next = !handsFreeMode;
-    setHandsFreeMode(next);
-    localStorage.setItem('maya_hands_free_listening', next ? 'true' : 'false');
-    audioManager.setHandsFree(next);
-    if (next) {
-      audioManager.requestMicrophone();
+  // Unified primary Talk handler: uses Gemini 3.8 Live voice when available, or seamless Voice Turn recording
+  const handlePrimaryTalk = useCallback(() => {
+    audioManager.unlockAudioContext();
+    if (isSpeaking) {
+      stopSpeaking();
+      return;
     }
-  };
+    if (isRecordingMemo || liveQuotaUnavailable) {
+      toggleTranscribeMemo();
+      return;
+    }
+    toggleLiveVoice();
+  }, [isSpeaking, isRecordingMemo, liveQuotaUnavailable, stopSpeaking, toggleTranscribeMemo, toggleLiveVoice]);
 
   // Touch & Swipe Gestures
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
@@ -1079,11 +1057,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
     touchStartRef.current = null;
 
     if (duration < 380 && Math.hypot(diffX, diffY) < 16) {
-      if (isSpeaking) {
-        stopSpeaking();
-      } else if (liveState === 'disconnected') {
-        wakeMayaManually();
-      }
+      handlePrimaryTalk();
       return;
     }
 
@@ -1126,232 +1100,40 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
 
   const quickPrompts =
     currentLangCode === 'sl-SI'
-      ? layoutMode === 'clock'
-        ? [
-            'Katere so današnje novice?',
-            'Kakšno je vreme?',
-            'Povej mi nekaj lepega za danes',
-          ]
-        : [
-            'Katere so današnje novice?',
-            'Kaj je na mojem urniku?',
-            'Katera so moja opravila?',
-            'Kakšno je vreme?',
-          ]
-      : layoutMode === 'clock'
-      ? [
-          `What's today's news?`,
-          'How is the weather?',
-          'Tell me something uplifting',
-        ]
-      : [
-          `What's today's news?`,
-          `What's my schedule?`,
-          'What are my tasks?',
-          'How is the weather?',
-        ];
-
-  const activeRoleObj = CHAT_ROLES.find((r) => r.id === chatRole) || CHAT_ROLES[0];
-  const activeSpeedObj = CHAT_SPEEDS.find((s) => s.id === chatSpeed) || CHAT_SPEEDS[0];
+      ? ['Katere so današnje novice?', 'Kakšno je vreme?', 'Kaj je na urniku?']
+      : [`What's today's news?`, 'How is the weather?', `What's on my schedule?`];
 
   return (
     <div
-      className={`relative min-h-[540px] md:min-h-0 h-full flex flex-col rounded-3xl overflow-hidden border transition-all duration-300 shadow-2xl ${
+      className={`relative min-h-[540px] md:min-h-0 h-full flex flex-col rounded-2xl overflow-hidden border transition-all duration-300 ${
         isNightDim
           ? 'bg-slate-950/90 border-amber-950/40 text-amber-100/80'
-          : 'bg-slate-900/90 border-slate-800 text-slate-100 backdrop-blur-xl'
+          : 'bg-slate-900/65 border-slate-800/70 text-slate-100 backdrop-blur-md'
       }`}
     >
-      {/* Top Bar on Companion Card */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-950/90 border-b border-slate-800/80 shrink-0 z-20">
-        {/* Left: Profile & Language + Mode Picker */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          <button
-            onClick={onOpenProfileModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[36px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 transition-colors cursor-pointer shrink-0"
-            title="User Profile & Voice Settings"
-          >
-            <span className="text-xs font-bold text-white whitespace-nowrap">Maya</span>
-            <span className="text-slate-600" aria-hidden="true">·</span>
-            <span className="text-[11px] text-sky-300 font-medium truncate max-w-[70px]">
-              {userProfile.name}
-            </span>
-            <Settings className="w-3 h-3 text-slate-400" />
-          </button>
+      {/* Clean Minimal Top Bar (No Companion dropdown, No Language dropdown, No Settings clutter) */}
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-slate-950/50 border-b border-slate-800/60 shrink-0 z-20">
+        <button
+          onClick={onOpenProfileModal}
+          className="flex items-center gap-2 text-left hover:opacity-85 transition-opacity cursor-pointer min-w-0"
+          title="Edit Profile & Location"
+        >
+          <span className="text-sm font-semibold text-white font-display">Maya</span>
+          <span className="text-slate-600" aria-hidden="true">·</span>
+          <span className="text-xs text-slate-400 truncate max-w-[110px]">
+            {userProfile.name}
+          </span>
+        </button>
 
-          {/* Language Selector */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowLanguagePicker(!showLanguagePicker);
-                setShowModePicker(false);
-              }}
-              className="flex items-center gap-1 px-2 py-1.5 min-h-[36px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition-colors cursor-pointer shrink-0"
-              title="Select language"
-            >
-              <span>{SUPPORTED_LANGUAGES.find((l) => l.code === currentLangCode)?.flag || '🌐'}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
-            </button>
-
-            {showLanguagePicker && (
-              <div className="absolute left-0 top-full mt-1.5 w-60 p-2 bg-slate-900/95 border border-slate-700 rounded-2xl shadow-2xl z-50 backdrop-blur-md">
-                <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1">
-                  <span className="text-[11px] font-semibold text-slate-300">Language</span>
-                  <span className="text-[10px] text-sky-400">Multilingual</span>
-                </div>
-                {SUPPORTED_LANGUAGES.map((lang) => (
-                  <button
-                    key={lang.code}
-                    onClick={() => {
-                      const updated = { ...userProfile, language: lang.code };
-                      onUpdateProfile(updated);
-                      tabletVoiceSensor.saveProfile(updated);
-                      audioManager.setLanguage(lang.code);
-                      setShowLanguagePicker(false);
-                    }}
-                    className={`w-full text-left p-2 rounded-xl mb-0.5 text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                      currentLangCode === lang.code
-                        ? 'bg-sky-500/20 text-sky-300 font-semibold'
-                        : 'text-slate-300 hover:bg-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span>{lang.flag}</span>
-                      <span>{lang.label}</span>
-                    </div>
-                    {currentLangCode === lang.code && <Check className="w-3.5 h-3.5 text-sky-400" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Chatbot Role & Model Selector */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowModePicker(!showModePicker);
-                setShowLanguagePicker(false);
-              }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[36px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] font-medium text-sky-300 transition-colors cursor-pointer whitespace-nowrap"
-              title={`${activeRoleObj.label} · ${activeSpeedObj.desc}`}
-            >
-              <Bot className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span className="hidden sm:inline">{activeRoleObj.label}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
-            </button>
-
-            {showModePicker && (
-              <div className="absolute left-0 top-full mt-1.5 w-64 p-2.5 bg-slate-900/95 border border-slate-700 rounded-2xl shadow-2xl z-50 backdrop-blur-md space-y-2.5">
-                <div>
-                  <span className="text-[11px] font-semibold text-slate-400 block px-1 mb-1">
-                    Assistant Role
-                  </span>
-                  <div className="space-y-1">
-                    {CHAT_ROLES.map((role) => (
-                      <button
-                        key={role.id}
-                        onClick={() => {
-                          setChatRole(role.id);
-                          setShowModePicker(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                          chatRole === role.id
-                            ? 'bg-sky-500/20 text-sky-300 font-semibold'
-                            : 'text-slate-300 hover:bg-slate-800'
-                        }`}
-                      >
-                        <div>
-                          <div>{role.label}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">{role.desc}</div>
-                        </div>
-                        {chatRole === role.id && <Check className="w-3.5 h-3.5 text-sky-400" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800">
-                  <span className="text-[11px] font-semibold text-slate-400 block px-1 mb-1">
-                    Model Intelligence
-                  </span>
-                  <div className="space-y-1">
-                    {CHAT_SPEEDS.map((sp) => (
-                      <button
-                        key={sp.id}
-                        onClick={() => {
-                          setChatSpeed(sp.id);
-                          setShowModePicker(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                          chatSpeed === sp.id
-                            ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
-                            : 'text-slate-300 hover:bg-slate-800'
-                        }`}
-                      >
-                        <div>
-                          <div>{sp.label}</div>
-                          <div className="text-[10px] text-slate-400 font-normal font-mono">
-                            {sp.desc}
-                          </div>
-                        </div>
-                        {chatSpeed === sp.id && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right: Real-Time Gemini 3.8 Live Voice + Hands-Free + Mute */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Live API Voice Conversation Toggle */}
           <button
-            onClick={toggleLiveVoice}
-            className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-xl border text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              liveState === 'connected'
-                ? 'bg-emerald-600 hover:bg-emerald-500 border-emerald-400 text-white shadow-lg'
-                : liveState === 'connecting'
-                ? 'bg-amber-600/80 border-amber-400 text-white'
-                : 'bg-sky-600/20 hover:bg-sky-600/30 border-sky-500/40 text-sky-200'
-            }`}
-            title="Start real-time voice conversation powered by Gemini 3.8 Live API"
+            type="button"
+            onClick={() => setIsLogsModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
+            title="Saved Conversation History"
           >
-            <AudioLines className={`w-3.5 h-3.5 ${liveState === 'connected' ? 'animate-pulse' : ''}`} />
-            <span>
-              {liveState === 'connected'
-                ? 'End Live'
-                : liveState === 'connecting'
-                ? 'Connecting...'
-                : 'Live Voice'}
-            </span>
-          </button>
-
-          {/* Hands-Free Wake Word Switch */}
-          <button
-            onClick={() => {
-              if (micStatus !== 'active') {
-                audioManager.requestMicrophone();
-                audioManager.startRecognition();
-              } else {
-                toggleHandsFree();
-              }
-            }}
-            className={`flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
-              isAwake
-                ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200'
-                : handsFreeMode && micStatus === 'active'
-                ? 'bg-slate-800 border-emerald-500/40 text-emerald-300'
-                : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
-            }`}
-            title={micStatus === 'active' ? 'Toggle "Maya..." wake word' : 'Enable microphone'}
-          >
-            <Radio className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">
-              {isAwake ? 'Listening' : micStatus === 'active' ? 'Say "Maya"' : 'Mic Off'}
-            </span>
+            <History className="w-3.5 h-3.5 text-sky-400" />
+            <span>History</span>
           </button>
 
           <button
@@ -1359,25 +1141,25 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
               if (isSpeaking) stopSpeaking();
               setVoiceEnabled(!voiceEnabled);
             }}
-            className={`p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+            className={`p-2 rounded-lg transition-colors cursor-pointer ${
               voiceEnabled
-                ? 'bg-slate-800 border-slate-700 text-sky-300'
-                : 'bg-slate-900 border-slate-800 text-slate-500'
+                ? 'text-sky-300 hover:bg-slate-800/80'
+                : 'text-slate-500 hover:bg-slate-800/80'
             }`}
-            title={voiceEnabled ? 'Mute voice output' : 'Unmute voice output'}
+            title={voiceEnabled ? 'Mute Maya voice' : 'Unmute Maya voice'}
           >
             {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* MAYA SMILING PORTRAIT FRAME (WHOLE FACE VISIBLE) */}
+      {/* MAYA SMILING PORTRAIT FRAME (CLEAN, UNOBSTRUCTED FACE) */}
       <div
-        className={`relative w-full overflow-hidden bg-slate-950 flex items-center justify-center select-none cursor-grab active:cursor-grabbing touch-pan-y shrink-0 transition-all duration-300 border-b ${
+        className={`relative w-full overflow-hidden bg-slate-950 flex items-center justify-center select-none cursor-pointer touch-pan-y shrink-0 transition-all duration-300 border-b ${
           layoutMode === 'clock'
             ? 'h-[235px] sm:h-[265px]'
-            : 'h-[195px] sm:h-[225px]'
-        } ${effectiveSpeaking ? 'border-sky-500/70' : 'border-slate-800/80'}`}
+            : 'h-[205px] sm:h-[235px]'
+        } ${effectiveSpeaking || isRecordingMemo ? 'border-sky-500/60' : 'border-slate-800/70'}`}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -1400,15 +1182,23 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
           }`}
         />
 
-        {/* Measured edge gradient for clean overlay contrast */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-slate-950/20 pointer-events-none" />
+        {/* Measured edge gradient */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/15 pointer-events-none" />
 
-        {/* Live Session or Active Speaking Header Tag */}
-        {(liveState === 'connected' || isSpeaking) && (
-          <div className="absolute top-2.5 left-3 z-20 flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-950/85 border border-sky-400/50 backdrop-blur-md">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-medium text-sky-200">
-              {liveState === 'connected' ? 'Gemini Live Voice Active' : 'Maya Speaking'}
+        {/* Live Session / Speaking / Recording Indicator */}
+        {(liveState === 'connected' || isSpeaking || isRecordingMemo) && (
+          <div className="absolute top-3 left-3 z-20 flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-950/85 border border-sky-400/40 backdrop-blur-md">
+            <span
+              className={`w-2 h-2 rounded-full animate-pulse ${
+                isRecordingMemo ? 'bg-rose-400' : 'bg-emerald-400'
+              }`}
+            />
+            <span className="text-xs font-medium text-slate-100">
+              {liveState === 'connected'
+                ? 'Live Voice Active'
+                : isRecordingMemo
+                ? 'Listening — tap to send'
+                : 'Maya Speaking'}
             </span>
           </div>
         )}
@@ -1420,17 +1210,17 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
               e.stopPropagation();
               stopSpeaking();
             }}
-            className="absolute top-2.5 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/95 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg cursor-pointer"
+            className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/95 hover:bg-rose-500 text-white font-medium text-xs shadow-lg cursor-pointer"
           >
             <Square className="w-3 h-3 fill-current" />
             <span>Stop</span>
           </button>
         )}
 
-        {/* Organic Dynamic Sound Visualizer (Both TTS & Live API 24kHz audio) */}
+        {/* Dynamic Sound Visualizer */}
         {effectiveSpeaking && (
-          <div className="absolute bottom-2.5 left-3 right-3 z-20 flex items-center justify-center pointer-events-none">
-            <div className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-2xl bg-slate-950/85 border border-sky-400/40 backdrop-blur-md shadow-xl">
+          <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-center pointer-events-none">
+            <div className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-2xl bg-slate-950/85 border border-sky-400/35 backdrop-blur-md">
               {Array.from({ length: 20 }).map((_, i) => {
                 const distFromCenter = Math.abs(i - 9.5);
                 const bandIndex = Math.min(15, Math.floor((1 - distFromCenter / 10) * 15));
@@ -1438,7 +1228,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
                 const centerWeight = 1 - (distFromCenter / 11) * 0.42;
                 const dynamicHeight = Math.max(
                   5,
-                  Math.min(40, Math.round((rawBand * 0.34 + activeAudioMetrics.rms * 28) * centerWeight))
+                  Math.min(38, Math.round((rawBand * 0.34 + activeAudioMetrics.rms * 28) * centerWeight))
                 );
                 const hueStop = Math.round(170 + (i / 19) * 125);
 
@@ -1446,7 +1236,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
                   <div
                     key={i}
                     className="flex items-center justify-center"
-                    style={{ height: '42px' }}
+                    style={{ height: '40px' }}
                   >
                     <div
                       className="w-1 sm:w-1.5 rounded-full transition-all duration-75 ease-out"
@@ -1458,9 +1248,6 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
                   </div>
                 );
               })}
-              <span className="ml-2 pl-2 border-l border-slate-700 text-[10px] font-mono text-sky-300 tabular-nums">
-                {activeAudioMetrics.db} dB
-              </span>
             </div>
           </div>
         )}
@@ -1483,71 +1270,47 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
           </div>
         )}
 
-        {/* One-Tap Microphone Activation Banner */}
-        {micStatus !== 'active' && liveState === 'disconnected' && !effectiveSpeaking && (
-          <div className="absolute bottom-2.5 left-3 right-3 z-20">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                audioManager.requestMicrophone();
-                audioManager.startRecognition();
-              }}
-              className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-xl flex items-center justify-center gap-2 cursor-pointer transition-colors"
-            >
-              <Mic className="w-4 h-4" />
-              <span>Tap to Enable Hands-Free Voice</span>
-            </button>
+        {/* Quiet Portrait Caption when Idle (Zero loud overlay buttons blocking Maya's face) */}
+        {!effectiveSpeaking && !transcript && !isAwake && !isRecordingMemo && liveState === 'disconnected' && (
+          <div className="absolute bottom-2.5 inset-x-0 z-10 flex justify-center pointer-events-none">
+            <span className="px-3 py-1 rounded-full bg-slate-950/65 text-[11px] text-slate-200/90 backdrop-blur-sm">
+              Tap portrait or Talk below
+            </span>
           </div>
         )}
 
         {/* Live Transcript Ticker */}
         {!effectiveSpeaking && (transcript || isAwake) && (
           <div className="absolute bottom-2.5 left-3 right-3 z-20 pointer-events-none">
-            <div className="px-3 py-2 rounded-xl bg-slate-950/90 border border-emerald-500/50 text-center backdrop-blur-md">
+            <div className="px-3 py-2 rounded-xl bg-slate-950/90 border border-emerald-500/40 text-center backdrop-blur-md">
               <div className="flex items-center justify-center gap-1.5 text-[10px] font-mono text-emerald-300">
                 <Timer className="w-3 h-3" />
                 <span>
                   {liveState === 'connected'
-                    ? 'Live listening'
+                    ? 'Listening'
                     : `Answering in ${secondsRemaining}s`}
                 </span>
               </div>
               {transcript && (
-                <p className="text-xs font-medium text-white truncate mt-0.5">"{transcript}"</p>
+                <p className="text-xs font-medium text-white truncate mt-0.5">&ldquo;{transcript}&rdquo;</p>
               )}
             </div>
           </div>
         )}
       </div>
 
-      {/* MULTI-TURN SCROLLABLE CHAT THREAD & CONTROLS */}
-      <div className="p-3 bg-slate-950/95 flex flex-col gap-2 flex-1 min-h-0">
-        {/* Status Line (unboxed clean metadata) */}
-        <div className="flex items-center justify-between text-[11px] text-slate-400 px-0.5 shrink-0">
-          <div className="flex items-center gap-1.5 truncate">
-            <span className="font-medium text-slate-300">{activeRoleObj.label}</span>
-            <span aria-hidden="true">·</span>
-            <span className="font-mono text-[10px] text-sky-400">{activeSpeedObj.label}</span>
-            {quotaNotice && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="text-amber-300">Offline Resilient</span>
-              </>
-            )}
+      {/* SPACIOUS MULTI-TURN CHAT THREAD & CLEAN CONTROLS */}
+      <div className="p-3.5 bg-slate-950/60 flex flex-col gap-2.5 flex-1 min-h-0">
+        {(quotaNotice || apiErrorNotice) && (
+          <div className="text-[11px] text-amber-300/95 px-1 truncate shrink-0" title={apiErrorNotice}>
+            {apiErrorNotice || 'API quota notice — check Settings > Secrets'}
           </div>
-          <button
-            type="button"
-            onClick={() => setIsLogsModalOpen(true)}
-            className="text-[11px] text-sky-400 hover:text-sky-300 font-medium cursor-pointer shrink-0"
-          >
-            History
-          </button>
-        </div>
+        )}
 
         {/* Scrollable Multi-Turn Conversation Thread */}
         <div
           ref={chatScrollRef}
-          className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1"
+          className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1"
         >
           {chatHistory.map((msg) => (
             <div
@@ -1557,15 +1320,15 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
               }`}
             >
               <div
-                className={`max-w-[92%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+                className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
                   msg.sender === 'user'
-                    ? 'bg-sky-600/25 border border-sky-500/30 text-slate-100'
-                    : 'bg-slate-900 border border-slate-800 text-slate-200'
+                    ? 'bg-sky-600/20 border border-sky-500/30 text-slate-100'
+                    : 'bg-slate-900/85 border border-slate-800/80 text-slate-200'
                 }`}
               >
-                <div className="flex items-center justify-between gap-3 mb-0.5">
+                <div className="flex items-center justify-between gap-3 mb-1">
                   <span
-                    className={`text-[10px] font-semibold ${
+                    className={`text-[11px] font-medium ${
                       msg.sender === 'user' ? 'text-sky-300' : 'text-emerald-300'
                     }`}
                   >
@@ -1578,21 +1341,21 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
                       className="text-slate-400 hover:text-sky-300 transition-colors cursor-pointer"
                       title="Play aloud"
                     >
-                      <Volume2 className="w-3 h-3" />
+                      <Volume2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
 
                 <p className="select-text whitespace-pre-wrap">{msg.text}</p>
 
-                {/* Verified Google Search Sources */}
+                {/* Optional quiet disclosure for saved web links (never read aloud) */}
                 {msg.sources && msg.sources.length > 0 && (
-                  <div className="mt-2 pt-1.5 border-t border-slate-800 space-y-1">
-                    <div className="flex items-center gap-1 text-[10px] text-sky-400 font-medium">
+                  <details className="mt-2 pt-1.5 border-t border-slate-800/70">
+                    <summary className="list-none flex items-center gap-1 text-[10px] text-slate-400 hover:text-sky-300 cursor-pointer select-none">
                       <Globe className="w-3 h-3" />
-                      <span>Google Search Sources</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
+                      <span>Links ({Math.min(3, msg.sources.length)})</span>
+                    </summary>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
                       {msg.sources.slice(0, 3).map((src, idx) => (
                         <a
                           key={idx}
@@ -1601,12 +1364,12 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-[10px] text-slate-300 hover:text-white underline truncate max-w-[200px]"
                         >
-                          <span className="truncate">{src.title || 'Source'}</span>
+                          <span className="truncate">{src.title || 'Article'}</span>
                           <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                         </a>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 )}
               </div>
             </div>
@@ -1614,7 +1377,7 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
 
           {isLoading && (
             <div className="flex items-start">
-              <div className="px-3 py-2 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-sky-300 flex items-center gap-2">
+              <div className="px-3.5 py-2 rounded-2xl bg-slate-900/85 border border-slate-800 text-xs text-sky-300 flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Thinking...</span>
               </div>
@@ -1622,68 +1385,60 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
           )}
         </div>
 
-        {/* Quick Prompts */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 shrink-0">
+        {/* 3 Clean Quick Suggestions */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-0.5 shrink-0">
           {quickPrompts.map((prompt) => (
             <button
               key={prompt}
               onClick={() => sendMessage(prompt)}
               disabled={isLoading}
-              className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white whitespace-nowrap transition-colors shrink-0 cursor-pointer"
+              className="px-3 py-1.5 text-[11px] rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800/80 text-slate-300 hover:text-white whitespace-nowrap transition-colors shrink-0 cursor-pointer"
             >
               {prompt}
             </button>
           ))}
         </div>
 
-        {/* Input & Voice Controls Row (>= 40px tablet touch targets) */}
+        {/* Clean 3-Control Input Row */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             sendMessage();
           }}
-          className="flex items-center gap-1.5 shrink-0"
+          className="flex items-center gap-2 shrink-0"
         >
-          {/* Wake-Word Talk Button */}
           <button
             type="button"
-            onClick={wakeMayaManually}
-            className={`px-3 min-h-[42px] rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer font-medium text-xs ${
-              isAwake
-                ? 'bg-emerald-600 text-white'
-                : 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700'
-            }`}
-            title='Tap to talk immediately or say "Maya..."'
-          >
-            <Mic className="w-4 h-4" />
-            <span className="text-xs whitespace-nowrap">
-              {isAwake ? `${secondsRemaining}s` : 'Talk'}
-            </span>
-          </button>
-
-          {/* Audio Transcription Record Button (gemini-3.5-transcribe) */}
-          <button
-            type="button"
-            onClick={toggleTranscribeMemo}
+            onClick={handlePrimaryTalk}
             disabled={isTranscribingMemo}
-            className={`px-2.5 min-h-[42px] rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer font-medium text-xs ${
-              isRecordingMemo
-                ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
-                : isTranscribingMemo
-                ? 'bg-amber-600/30 border border-amber-500/40 text-amber-200'
-                : 'bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700'
+            className={`px-3.5 min-h-[42px] rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer font-medium text-xs ${
+              liveState === 'connected'
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                : isRecordingMemo
+                ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                : liveState === 'connecting' || isTranscribingMemo
+                ? 'bg-amber-600/80 text-white'
+                : 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700/80'
             }`}
-            title="Record audio and transcribe with Gemini 3.5 Transcribe"
+            title="Talk naturally with Maya"
           >
-            {isTranscribingMemo ? (
+            {liveState === 'connecting' || isTranscribingMemo ? (
               <Loader2 className="w-4 h-4 animate-spin" />
-            ) : isRecordingMemo ? (
+            ) : liveState === 'connected' || isRecordingMemo ? (
               <Square className="w-3.5 h-3.5 fill-current" />
             ) : (
-              <AudioLines className="w-4 h-4" />
+              <Mic className="w-4 h-4" />
             )}
-            <span className="text-xs whitespace-nowrap hidden sm:inline">
-              {isRecordingMemo ? 'Stop & Send' : isTranscribingMemo ? 'Transcribing' : 'Voice Note'}
+            <span className="text-xs whitespace-nowrap">
+              {liveState === 'connected'
+                ? 'End'
+                : isRecordingMemo
+                ? 'Send Voice'
+                : liveState === 'connecting'
+                ? 'Connecting'
+                : isTranscribingMemo
+                ? 'Listening'
+                : 'Talk'}
             </span>
           </button>
 
@@ -1691,9 +1446,9 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Message Maya in any language..."
+            placeholder="Message Maya..."
             disabled={isLoading}
-            className="flex-1 min-w-0 min-h-[42px] px-3 text-xs bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+            className="flex-1 min-w-0 min-h-[42px] px-3.5 text-xs bg-slate-900/90 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
           />
 
           <button
