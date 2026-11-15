@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  
+  h1, h2, h3, .font-display {
+    font-family: 'Outfit', sans-serif;
+  }
+}
+
+/* Custom scrollbar for sleek tablet experience */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+/* Subtle breathing animation for companion presence */
+@keyframes companion-breathe {
+  0%, 100% {
+    transform: scale(1.0);
+    filter: brightness(1.0);
+  }
+  50% {
+    transform: scale(1.018);
+    filter: brightness(1.025);
+  }
+}
+
+.animate-companion-breathe {
+  animation: companion-breathe 6.5s ease-in-out infinite;
+}
+
+/* Lively conversational motion when speaking */
+@keyframes companion-talking {
+  0% {
+    transform: scale(1.01) translateY(0px) rotate(0deg);
+  }
+  20% {
+    transform: scale(1.02) translateY(-2px) rotate(0.4deg);
+  }
+  40% {
+    transform: scale(1.015) translateY(1px) rotate(-0.3deg);
+  }
+  60% {
+    transform: scale(1.022) translateY(-1.5px) rotate(0.2deg);
+  }
+  80% {
+    transform: scale(1.018) translateY(0.5px) rotate(-0.2deg);
+  }
+  100% {
+    transform: scale(1.01) translateY(0px) rotate(0deg);
+  }
+}
+
+.animate-companion-talking {
+  animation: companion-talking 2.4s ease-in-out infinite;
+}
+
+/* Audio wave bar animation */
+@keyframes wave-bar {
+  0%, 100% {
+    height: 6px;
+  }
+  50% {
+    height: 28px;
+  }
+}
+
+.animate-wave-bar {
+  animation: wave-bar 0.9s ease-in-out infinite;
+}
+
+/* Anti burn-in pixel shift classes */
+.burn-in-shift-0 { transform: translate(0px, 0px); }
+.burn-in-shift-1 { transform: translate(1px, 1px); }
+.burn-in-shift-2 { transform: translate(-1px, 1px); }
+.burn-in-shift-3 { transform: translate(1px, -1px); }
+.burn-in-shift-4 { transform: translate(-1px, -1px); }
+
