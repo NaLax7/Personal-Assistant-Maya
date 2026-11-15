@@ -6,14 +6,31 @@ interface WishesWidgetProps {
   isNightDim?: boolean;
 }
 
+const OFFLINE_WISHES = [
+  'May you find ease in the steady moments today, breathing deeply and letting each task take its own time.',
+  'May your morning begin with quiet clarity, and your evening settle into peaceful rest.',
+  'May small steps today bring steady progress without rush or noise.',
+  'May warmth, patience, and good energy stay beside you through every hour of the day.',
+  'May you notice one calm detail around you right now and let your shoulders soften.',
+  'May your focus feel effortless and your breaks feel genuinely restorative.',
+];
+
 export const WishesWidget: React.FC<WishesWidgetProps> = ({ isNightDim = false }) => {
-  const [wish, setWish] = useState<string>(
-    'May you find ease in the steady moments today, breathing deeply and letting each task take its own time.'
-  );
+  const [wish, setWish] = useState<string>(OFFLINE_WISHES[0]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
+  const rotateOfflineWish = () => {
+    const candidates = OFFLINE_WISHES.filter((w) => w !== wish);
+    const next = candidates[Math.floor(Math.random() * candidates.length)] || OFFLINE_WISHES[0];
+    setWish(next);
+  };
+
   const fetchNewWish = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      rotateOfflineWish();
+      return;
+    }
     setIsRefreshing(true);
     try {
       const hour = new Date().getHours();
@@ -23,12 +40,15 @@ export const WishesWidget: React.FC<WishesWidgetProps> = ({ isNightDim = false }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeOfDay }),
       });
+      if (!res.ok) throw new Error('Wish endpoint unavailable');
       const data = await res.json();
       if (data.wish) {
         setWish(data.wish);
+      } else {
+        rotateOfflineWish();
       }
     } catch {
-      // Quiet fallback to existing wish
+      rotateOfflineWish();
     } finally {
       setIsRefreshing(false);
     }

@@ -1,74 +1,85 @@
-# Android Tablet Installation & Desk Setup Guide
+# Standalone Android Tablet Setup Guide (No Computer Required)
 
-This guide walks you through turning any **Android tablet** (Samsung Galaxy Tab, Huawei MediaPad T3/T5, Lenovo Tab, Xiaomi Pad, or older Android 7+ tablets) into an always-on **Maya Companion** smart display.
-
----
-
-## 1. Requirements
-
-- Android tablet running **Google Chrome** (v80+) or **Microsoft Edge**
-- Active Wi-Fi connection
-- A hosted HTTPS URL for Maya (or a PC running Maya on the same Wi-Fi network)
-
-> **Huawei & Non-Google-Play Tablets**: Maya installs as a Progressive Web App (PWA) directly from the browser — Google Play Store is **not** required.
+This guide explains how to install and run **Maya Companion** completely **by itself** on any **Android tablet** (Samsung Galaxy Tab, Huawei MediaPad T3/T5, Lenovo Tab, Xiaomi Pad, or older Android 7+ tablets) with **zero computer connection**.
 
 ---
 
-## 2. Install Maya onto the Tablet Home Screen
+## 1. What You Need
 
-### Method A: Hosted HTTPS URL (Fastest — 30 Seconds)
-1. Open **Google Chrome** on your Android tablet.
-2. Enter your Maya HTTPS web address.
-3. Tap **Install** in Maya's top bar, **or** tap Chrome's **⋮** menu (top right) and select **Install app** (on older Chrome versions: **Add to Home screen**).
-4. Tap **Install** on the confirmation popup.
-5. Open **Maya** from your tablet's app drawer or home screen. It runs full-screen with no browser address bar.
+- An Android tablet with **Google Chrome** (or Microsoft Edge)
+- A link to your deployed **Maya Companion** HTTPS web address
+- Internet access once to install (after installation, offline features run right on the tablet even without internet!)
 
-### Method B: Local Home PC / Same Wi-Fi Setup
-1. Start Maya on your computer (`npm run build && npm start`).
-2. Find your computer's local Wi-Fi IP address (for example `192.168.1.45`) or click **Install** on your computer to view detected local Wi-Fi URLs.
-3. On your Android tablet, open **Chrome** and visit `http://192.168.1.45:3000`.
-4. **Enable Microphone & Install on Plain HTTP**:
-   - Open a new Chrome tab and go to: `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
-   - Paste `http://192.168.1.45:3000` into the text field.
-   - Change the dropdown to **Enabled**.
-   - Tap **Relaunch** at the bottom of Chrome.
-5. Re-open your `http://192.168.1.45:3000` tab, allow microphone access when asked, and tap **⋮ → Install app**.
+> **No Google Play Store & No USB Cable Needed**: Maya installs straight from Chrome onto your home screen as an independent full-screen app, which also works smoothly on Huawei tablets and older Android models.
 
 ---
 
-## 3. Recommended Android Tablet Settings (24/7 Stand Mode)
+## 2. Install Maya Directly on the Tablet (4 Steps)
 
-To keep your tablet running smoothly all day and night on a desk or bedside stand:
+Do everything right on the tablet screen — you do **not** need a laptop, PC, or cable:
 
-1. **Landscape / Auto-Rotate**:
-   - Swipe down from the top of your Android tablet and turn on **Auto-rotate** (or lock **Landscape**).
-   - Horizontal tablets (`1024px+` wide, like `1280×800`) automatically unlock the zero-scroll split dashboard.
-   - Portrait tablets (`800×1280`) automatically switch to a clean scrollable layout with Maya on top.
-2. **Focus Modes**:
-   - Use **Clock & Maya** in the top header when you only want the large clock, date, weather, and Maya's portrait visible.
-   - Tap the **Moon** button at night to enable low-brightness **Night Dim**.
-3. **Keep Screen Awake**:
-   - Maya uses the browser **Screen Wake Lock** while open on screen.
-   - For older Android 7/8 tablets where the OS enforces a system screen timeout, go to **Android Settings → Display → Sleep** and select **Never** (or **30 minutes**), or enable **Developer Options → Stay awake while charging**.
-4. **Microphone & Spoken Language**:
-   - Tap **Talk** or tap Maya's portrait once and tap **Allow** when Chrome asks to use the microphone.
-   - Speak naturally in **Slovenian** (`sl-SI`), **English** (`en-US`), **German**, or any supported language — Maya detects your language automatically, or you can lock a preferred language by tapping `Maya · <Your Name>` in the Maya card.
+1. **Open Chrome on the Tablet**
+   Launch **Google Chrome** and open your **Maya Companion HTTPS URL**.
+2. **Tap Install**
+   Tap the **Install** button in the top-right bar of Maya — **or** tap Chrome's **⋮ menu** (top-right corner) and select **Install app** (on older Chrome versions: **Add to Home screen**).
+3. **Confirm Installation**
+   Tap **Install** on the popup. Android creates a dedicated **Maya** app icon on your home screen.
+4. **Launch Maya Standalone**
+   Close Chrome and tap the new **Maya** icon on your tablet home screen. Maya opens in full-screen standalone mode without any browser address bar and runs completely by itself.
 
 ---
 
-## 4. Privacy Verification on Your Tablet
+## 3. First Launch Permissions
 
-- **Where are my chats stored?** Strictly inside your tablet browser's local storage (`localStorage`).
-- **Can I save a copy?** Tap **History** in the Maya card → **Save to Tablet** to download a `.txt` transcript.
-- **How do I wipe everything?** Tap `Maya · <Your Name>` → scroll to **Spoken Language & Privacy** → **Erase Local Data**.
+1. Tap **Talk** (or tap Maya's smiling portrait) and tap **Allow** when Android asks for **Microphone** access.
+2. When prompted for **Location**, tap **Allow** if you want automatic local city detection and live weather (only rounded ~1 km coordinates are used, stored strictly on the tablet).
 
 ---
 
-## 5. Troubleshooting
+## 4. What Works Online vs. Offline by Itself
+
+Once installed on your tablet:
+
+| Feature | Works Offline (No Internet) | Works Online (Tablet Wi-Fi / 4G) |
+| :--- | :---: | :---: |
+| **Live Clock, Date & Standby Mode** | Yes | Yes |
+| **Tasks & Daily Schedule (Local Storage)** | Yes | Yes |
+| **Daily Wishes & Focus Timer (Pomodoro)** | Yes | Yes |
+| **Quick Voice Commands (Time, Date, Tasks, Weather Cache)** | Yes | Yes |
+| **Natural Multilingual Voice Conversation & News** | — | Yes |
+| **Live Weather Refresh** | Cached forecast | Live forecast |
+
+---
+
+## 5. Recommended 24/7 Tablet Stand Settings
+
+1. **Orientation**:
+   - **Landscape (Horizontal, 1024px+ wide / `1280×800`)**: Zero-scroll split view with Clock/Planner + Maya side-by-side.
+   - **Portrait (Vertical, `800×1280`)**: Clean scrollable layout with Maya on top and Clock/Planner below.
+2. **Keep Display Awake**:
+   - Maya automatically enables **Screen Wake Lock** while visible on screen.
+   - On older Android 7/8 tablets where the system enforces a display timeout, open **Android Settings → Display → Sleep → Never** (or **30 minutes**).
+3. **Bedside Night Mode**:
+   - Switch the top toggle to **Clock & Maya** to hide tasks and show only the large clock, date, weather, and Maya.
+   - Tap the **Moon** button to lower screen brightness with **Night Dim**.
+4. **Spoken Language**:
+   - Speak naturally in **Slovenian** (`sl-SI`), **English** (`en-US`), **German**, or other supported languages — or tap `Maya · <Your Name>` to lock a preferred language.
+
+---
+
+## 6. Device Privacy Controls
+
+- **Local-First Storage**: Your name, tasks, schedule, and conversation history remain inside your tablet's own storage (`localStorage`), never in an external user database.
+- **Export History**: Tap **History → Save to Tablet** to save a `.txt` transcript straight to your tablet's Downloads folder.
+- **One-Tap Erase**: Tap `Maya · <Your Name>` → **Erase Local Data** to wipe all locally saved data immediately.
+
+---
+
+## 7. Troubleshooting on Android Tablets
 
 | Issue | Fix |
 | :--- | :--- |
-| **Microphone permission blocked on `192.168.x.x`** | Use `https://` or enable `chrome://flags/#unsafely-treat-insecure-origin-as-secure` (Method B step 4). |
-| **"Install app" option missing in Chrome** | Reload once after enabling the flag or visit via `https://`. Older tablets show **Add to Home screen**. |
-| **No sound when Maya replies** | Tap once anywhere on the screen or tap the speaker icon on a message bubble to unlock Android Web Audio playback, and verify the tablet's Media Volume is turned up. |
-| **Layout feels cramped on a small tablet** | Rotate to landscape or switch the top toggle to **Clock & Maya**. |
+| **"Install app" option doesn't appear** | Make sure the URL starts with `https://`, reload once in Google Chrome, and check Chrome **⋮ → Add to Home screen**. |
+| **No sound when Maya replies** | Tap once anywhere on the screen or tap the speaker icon on a message bubble to unlock Android audio playback, and turn up **Media Volume**. |
+| **Microphone says blocked** | Tap the padlock / site settings icon next to Chrome's address bar → **Permissions → Microphone → Allow** (or **Android Settings → Apps → Chrome → Permissions → Microphone**). |
+| **Screen still dims on older Android 7/8** | Set **Android Settings → Display → Sleep → Never** (or **Stay awake while charging** under Developer Options). |

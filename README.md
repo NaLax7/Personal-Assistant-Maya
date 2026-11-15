@@ -2,62 +2,46 @@
 
 ![Maya Companion Banner](docs/preview-banner.png)
 
-**Maya Companion** is an always-on personal assistant, ambient clock, daily planner, and natural voice companion built for **Android tablets**, **Android phones**, **iPhones**, and desktop browsers. Designed for zero-scroll landscape tablet stands (`1280×800`) as well as portrait mobile use, it pairs a calm dashboard with expressive multilingual voice conversation (including native Slovenian and English) and keeps all personal data strictly local on your device.
+**Maya Companion** is an independent, always-on personal assistant, ambient clock, daily planner, and natural voice companion built to run directly on **Android tablets**, **Android phones**, and **iPhones/iPads** — completely by itself, with **no computer or PC connection required**.
+
+Designed for zero-scroll horizontal tablet stands (`1280×800`) as well as portrait tablets and phones, Maya combines a calm full-screen dashboard with fluent multilingual conversation (including native Slovenian and English) and keeps all personal data strictly on your device.
 
 > **Interactive Deck & Video**
 > - Open [`docs/presentation.html`](docs/presentation.html) in any browser for the full interactive presentation.
-> - Download or play [`docs/maya-android-tablet-install.mp4`](docs/maya-android-tablet-install.mp4) for the step-by-step installation walkthrough video.
+> - Download or play [`docs/maya-android-tablet-install.mp4`](docs/maya-android-tablet-install.mp4) for the standalone tablet installation walkthrough video.
 
-![Maya Installation Walkthrough Preview](docs/maya-install-preview.gif)
+![Maya Standalone Installation Walkthrough](docs/maya-install-preview.gif)
 
 ---
 
 ## Key Features
 
-- **Android Tablet Always-On Display**: Zero-scroll split layout for horizontal tablets (Huawei MediaPad, Samsung Galaxy Tab, Lenovo Tab, Fire/Android tablets), automatic Screen Wake Lock, **Night Dim** mode, and a one-tap **Clock & Maya** minimalist view.
-- **Natural Multilingual Voice**: Expressive human-sounding voice synthesis and real-time voice conversation in Slovenian, English, German, and more with automatic language detection.
-- **Live News & Daily Context**: Clean, concise spoken news briefings without website clutter, live neighborhood weather, daily wishes, focus timer (Pomodoro), tasks, and day schedule.
+- **100% Standalone on Your Tablet (No PC Required)**: Opens straight from your tablet browser and installs onto your home screen as a dedicated full-screen app that runs independently on Wi-Fi or mobile data — and keeps working even offline.
+- **Always-On Desk & Bedside Display**: Zero-scroll landscape layout for Android tablets (Huawei MediaPad, Samsung Galaxy Tab, Lenovo Tab, Xiaomi Pad, etc.), automatic Screen Wake Lock, **Night Dim** mode, and a one-tap **Clock & Maya** standby view.
+- **Natural Multilingual Voice**: Expressive voice synthesis and real-time voice conversation in Slovenian, English, German, and more with automatic language detection and native on-device voice fallback.
+- **Works Even Offline**: Clock, date, weather cache, daily wishes, tasks, schedule, Pomodoro timer, and quick local voice commands (*time, date, weather, add task, schedule*) continue running directly on the tablet without internet.
+- **Live News & Daily Context**: Clean, concise spoken news summaries without publisher clutter, plus neighborhood weather and daily calendar guidance when online.
 - **Privacy-First Local Storage**:
-  - **Zero server database** and **zero IP tracking or analytics**.
-  - Tasks, schedule, profile, and conversation history stay exclusively in your device's `localStorage` with one-tap **Save to Tablet** export and **Erase Local Data**.
-  - Weather coordinates are rounded to ~1 km neighborhood precision and never stored as exact street addresses.
-- **Installable PWA (No Play Store Needed)**: Installs straight from Chrome onto your Android tablet or phone home screen as a full-screen standalone app.
+  - **Zero server database**, **zero analytics**, and **zero IP logging**.
+  - Tasks, schedule, profile, and conversation history stay inside your tablet's `localStorage` with one-tap **Save to Tablet** export and **Erase Local Data**.
 
 ---
 
-## Android Tablet Installation (Quick Guide)
+## Standalone Tablet Installation (No Computer Needed)
 
-Full illustrated steps are available in [`docs/ANDROID_TABLET_GUIDE.md`](docs/ANDROID_TABLET_GUIDE.md).
+Full step-by-step instructions and troubleshooting live in [`docs/ANDROID_TABLET_GUIDE.md`](docs/ANDROID_TABLET_GUIDE.md).
 
-### Option 1: Install Directly on Your Android Tablet (Recommended)
-1. Open **Google Chrome** (or Microsoft Edge) on your Android tablet and navigate to your hosted HTTPS Maya URL.
-2. Tap the **Install** button in the top-right bar (or tap Chrome's **⋮ menu → Install app** / **Add to Home screen**).
-3. Confirm **Install**. Maya will appear on your tablet's home screen and launch full-screen without browser bars.
-4. When prompted, tap **Allow** for **Microphone** (for voice talk) and **Location** (optional, for local weather).
-5. Place your tablet on a desk or bedside stand — **Screen Wake Lock** automatically keeps the clock and Maya visible while the app is open, and you can toggle the **Moon icon** for **Night Dim**.
+### Install Directly on Any Android Tablet (30 Seconds)
+1. On your Android tablet, open **Google Chrome** (or Microsoft Edge) and open your live **Maya Companion HTTPS URL**.
+2. Tap **Install** in Maya's top bar — or tap Chrome's **⋮ menu → Install app** (*Add to Home screen* on older Chrome versions).
+3. Tap **Install** to add **Maya** as an independent app icon on your home screen.
+4. Open **Maya** from your home screen and allow **Microphone** (for voice conversation) and **Location** (optional, for local weather).
+5. Place the tablet on a stand or charger — **Screen Wake Lock** automatically keeps the display lit, and Maya runs completely by itself.
 
-### Option 2: Run on Your Own PC / Home Server (Same Wi-Fi)
-If you want to host Maya yourself on your home network:
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/<your-username>/maya-companion.git
-cd maya-companion
-
-# 2. Install dependencies
-npm install
-
-# 3. Configure your environment key
-cp .env.example .env
-# Edit .env and add your API key
-
-# 4. Build and start the production server
-npm run build
-npm start
-```
-
-- Open `http://localhost:3000` on your computer, or `http://<YOUR_PC_LOCAL_IP>:3000` on your Android tablet on the same Wi-Fi.
-- **Important for Android Chrome on plain `http://` LAN URLs**: Android blocks microphone & PWA installation on non-HTTPS LAN addresses by default. On your tablet, open `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, add `http://<YOUR_PC_LOCAL_IP>:3000`, set it to **Enabled**, and relaunch Chrome (or serve Maya over HTTPS with Caddy/Cloudflare Tunnel/Tailscale Serve).
+### iPhone & iPad (Safari)
+1. Open your **Maya Companion HTTPS URL** in **Safari**.
+2. Tap the **Share** button → **Add to Home Screen** → **Add**.
+3. Launch **Maya** from your home screen in full-screen standalone mode.
 
 ---
 
@@ -65,10 +49,10 @@ npm start
 
 | Control | Action |
 | :--- | :--- |
-| **Clock & Maya / Tasks & Schedule** | Switch between clean Clock + Maya view and full Planner view |
-| **Talk** (or tap Maya's portrait) | Start real-time voice conversation or 1-tap Voice Turn |
+| **Clock & Maya / Tasks & Schedule** | Switch between minimal Clock + Maya view and full Planner view |
+| **Talk** (or tap Maya's portrait) | Start live voice conversation or 1-tap Voice Turn |
 | **Swipe Left / Right on Portrait** | Dismiss or complete the top pending task |
-| **History** | Search, read, or export saved conversations locally |
+| **History** | Search, read, or export saved conversations directly to your tablet |
 | **Maya · Name** | Edit your name, spoken language, calibrate voice sensor, or erase local data |
 | **Moon / Sun Icon** | Toggle low-brightness **Night Dim** for bedside use |
 
@@ -79,10 +63,10 @@ npm start
 ```text
 maya-companion/
 ├── docs/
-│   ├── ANDROID_TABLET_GUIDE.md         # Detailed Android tablet setup & troubleshooting
+│   ├── ANDROID_TABLET_GUIDE.md         # Standalone Android tablet setup & troubleshooting
 │   ├── presentation.html               # Interactive slide presentation
-│   ├── maya-android-tablet-install.mp4 # Installation & overview walkthrough video
-│   ├── maya-install-preview.gif        # Animated README walkthrough preview
+│   ├── maya-android-tablet-install.mp4 # Standalone installation walkthrough video
+│   ├── maya-install-preview.gif        # Animated README preview
 │   └── preview-banner.png              # Project hero banner
 ├── public/
 │   ├── manifest.json                   # Standalone PWA manifest
@@ -91,15 +75,24 @@ maya-companion/
 │   ├── components/                     # Watch, Tasks, Schedule, Maya Card, Modals
 │   ├── hooks/                          # PWA install lifecycle hook
 │   ├── utils/                          # Local storage, audio hardware, weather, voice client
-│   └── App.tsx                         # Responsive Android tablet / phone layout & wake lock
-└── server.ts                           # Express + WebSocket API proxy & production static server
+│   └── App.tsx                         # Responsive tablet / phone layout & Screen Wake Lock
+└── server.ts                           # Cloud backend service & API proxy
 ```
 
 ---
 
-## Development Scripts
+## Cloud Deployment & Development
 
-- `npm run dev` — Start development server on port `3000`
-- `npm run build` — Build optimized frontend & PWA service worker into `dist/`
-- `npm start` — Run production server serving `dist/` and `/api/*` endpoints
-- `npm run lint` — Run strict TypeScript verification (`tsc --noEmit`)
+Maya is built to be hosted directly in the cloud (Cloud Run, Render, Railway, or Fly.io) so tablets and phones run independently on any Wi-Fi connection without touching a computer at home.
+
+```bash
+npm install
+cp .env.example .env   # Configure GEMINI_API_KEY in your cloud environment
+npm run build
+npm start
+```
+
+- `npm run dev` — Run development environment on port `3000`
+- `npm run build` — Build standalone frontend & offline service worker (`dist/`)
+- `npm start` — Start production server serving `dist/` and `/api/*`
+- `npm run lint` — Verify TypeScript types (`tsc --noEmit`)

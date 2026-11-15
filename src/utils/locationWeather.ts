@@ -75,11 +75,33 @@ export async function detectTabletLocation(): Promise<TabletLocation> {
             if (typeof data.city === 'string' && data.city.trim()) {
               detectedCity = data.city.trim();
             }
+          } else {
+            throw new Error('Reverse geocode fallback');
           }
         } catch {
           try {
-            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            detectedCity = tz.split('/')[1]?.replace(/_/g, ' ') || 'Local Device';
+            if (navigator.onLine) {
+              const osmRes = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?lat=${latitude.toFixed(2)}&lon=${longitude.toFixed(2)}&format=json&zoom=10`,
+                { headers: { 'Accept-Language': 'en' } }
+              );
+              if (osmRes.ok) {
+                const osmData = await osmRes.json();
+                const directCity =
+                  osmData.address?.city ||
+                  osmData.address?.town ||
+                  osmData.address?.municipality ||
+                  osmData.address?.village ||
+                  osmData.address?.county;
+                if (typeof directCity === 'string' && directCity.trim()) {
+                  detectedCity = directCity.trim();
+                }
+              }
+            }
+            if (detectedCity === 'Local Device') {
+              const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+              detectedCity = tz.split('/')[1]?.replace(/_/g, ' ') || 'Local Device';
+            }
           } catch {
             // Keep default
           }

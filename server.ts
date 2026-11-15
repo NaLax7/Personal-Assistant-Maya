@@ -5,7 +5,6 @@ import { WebSocketServer } from 'ws';
 import { GoogleGenAI, Modality, ThinkingLevel } from '@google/genai';
 import type { LiveServerMessage } from '@google/genai';
 import dotenv from 'dotenv';
-import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -36,15 +35,6 @@ function isSafeHttpUrl(rawUrl: unknown): rawUrl is string {
   }
 }
 
-function isLocalPrivateAddress(addr: string | undefined): boolean {
-  if (!addr) return false;
-  const cleaned = addr.replace(/^::ffff:/, '');
-  if (cleaned === '127.0.0.1' || cleaned === '::1' || cleaned === 'localhost') return true;
-  if (cleaned.startsWith('192.168.') || cleaned.startsWith('10.')) return true;
-  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(cleaned)) return true;
-  return false;
-}
-
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
@@ -66,29 +56,6 @@ const aiLive = new GoogleGenAI({
 
 app.get('/api/health', (_req: Request, res: Response) => {
   return res.json({ status: 'ok', assistant: 'Maya' });
-});
-
-// Local Wi-Fi address helper (strictly scoped to private LAN clients; never exposed remotely)
-app.get('/api/network-info', (req: Request, res: Response) => {
-  const forwarded = req.headers['x-forwarded-for'];
-  const remoteAddr = req.socket?.remoteAddress;
-  if (forwarded || !isLocalPrivateAddress(remoteAddr)) {
-    return res.json({ port: PORT, lanUrls: [] });
-  }
-  const interfaces = os.networkInterfaces();
-  const lanUrls: string[] = [];
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name] || []) {
-      if (
-        iface.family === 'IPv4' &&
-        !iface.internal &&
-        !iface.address.startsWith('169.254.')
-      ) {
-        lanUrls.push(`http://${iface.address}:${PORT}`);
-      }
-    }
-  }
-  return res.json({ port: PORT, lanUrls });
 });
 
 // Approximate city lookup (rounds coordinates and never returns street-level address)

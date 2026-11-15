@@ -104,7 +104,7 @@ class LiveVoiceClient {
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Microphone requires HTTPS or localhost in this browser.');
+        throw new Error('Microphone access requires a secure HTTPS connection.');
       }
 
       // Request microphone stream with echo cancellation

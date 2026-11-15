@@ -461,15 +461,105 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
         };
       }
 
+      if (
+        lower === 'what is the date' ||
+        lower === "what's the date" ||
+        lower === 'what day is it' ||
+        lower === 'kateri datum je' ||
+        lower === 'kateri dan je' ||
+        lower === 'datum'
+      ) {
+        const isSlDate = lower.includes('kateri') || lower === 'datum';
+        const dateStr = new Date().toLocaleDateString(isSlDate ? 'sl-SI' : 'en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+        });
+        return {
+          handled: true,
+          reply: isSlDate ? `Danes je ${dateStr}.` : `Today is ${dateStr}.`,
+          lang: isSlDate ? 'sl-SI' : 'en-US',
+        };
+      }
+
+      if (
+        lower.startsWith('add event ') ||
+        lower.startsWith('dodaj dogodek ') ||
+        lower.startsWith('dodaj na urnik ')
+      ) {
+        const isSlEvent = lower.startsWith('dodaj ');
+        const eventTitle = rawMessage
+          .replace(/^(add event|dodaj dogodek|dodaj na urnik)\s+/i, '')
+          .trim();
+        if (eventTitle) {
+          onAddEvent({
+            title: eventTitle,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+            duration: '30m',
+            category: 'focus',
+            completed: false,
+          });
+          return {
+            handled: true,
+            reply: isSlEvent
+              ? `Dodala sem "${eventTitle}" na tvoj današnji urnik.`
+              : `Added "${eventTitle}" to today's schedule.`,
+            lang: isSlEvent ? 'sl-SI' : 'en-US',
+          };
+        }
+      }
+
+      if (
+        lower === 'hello' ||
+        lower === 'hi' ||
+        lower === 'hi maya' ||
+        lower === 'hey maya' ||
+        lower === 'živjo' ||
+        lower === 'zivjo' ||
+        lower === 'zdravo' ||
+        lower === 'dobro jutro' ||
+        lower === 'dober dan' ||
+        lower === 'dober večer' ||
+        lower === 'good morning' ||
+        lower === 'good evening' ||
+        lower === 'how are you' ||
+        lower === 'kako si' ||
+        lower === 'thank you' ||
+        lower === 'thanks' ||
+        lower === 'hvala'
+      ) {
+        const isSlGreet =
+          /živjo|zivjo|zdravo|dobro|dober|kako|hvala/.test(lower) ||
+          currentLangCode === 'sl-SI';
+        if (lower.includes('hvala') || lower.includes('thank')) {
+          return {
+            handled: true,
+            reply: isSlGreet
+              ? `Z veseljem, ${userProfile.name}! Vedno sem tukaj zate.`
+              : `You're very welcome, ${userProfile.name}! I'm always right here.`,
+            lang: isSlGreet ? 'sl-SI' : 'en-US',
+          };
+        }
+        return {
+          handled: true,
+          reply: isSlGreet
+            ? `Živjo, ${userProfile.name}! Tukaj sem in pripravljena. Kako ti lahko danes polepšam dan?`
+            : `Hi ${userProfile.name}! I'm right here and doing well. How can I help with your day?`,
+          lang: isSlGreet ? 'sl-SI' : 'en-US',
+        };
+      }
+
       return { handled: false };
     },
     [
       userProfile.name,
+      currentLangCode,
       weather,
       location.city,
       tasks,
       schedule,
       onAddTask,
+      onAddEvent,
       onToggleTask,
       onDeleteTask,
       stopSpeaking,
@@ -633,12 +723,19 @@ export const RealisticMayaCard: React.FC<RealisticMayaCardProps> = ({
           speakText(reply, detectedLang);
         }
       } catch (err: any) {
-        const errMsg = err?.message || 'Unable to reach Maya server';
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+        const errMsg = isOffline
+          ? 'Device is offline'
+          : err?.message || 'Service temporarily unreachable';
         setApiErrorNotice(errMsg);
         const errorReply =
           currentLangCode === 'sl-SI'
-            ? `Trenutno ni povezave s strežnikom (${errMsg}). Preveri Wi-Fi povezavo in poskusi znova.`
-            : `I couldn't reach Maya's server right now (${errMsg}). Please check your connection and try again.`;
+            ? isOffline
+              ? `Tablica je trenutno brez interneta. Ura, opravila, urnik, želje in hitri ukazi (vreme, ura, dodaj opravilo) delujejo normalno naprej.`
+              : `Spletna storitev je trenutno nedosegljiva. Lokalna opravila, ura in hitri glasovni ukazi delujejo normalno na napravi.`
+            : isOffline
+            ? `Your tablet is currently offline. Clock, tasks, schedule, wishes, and quick voice commands (time, date, weather, add task) continue working locally.`
+            : `Live cloud conversation is temporarily unavailable right now. Clock, tasks, schedule, and quick local voice commands continue working on your device.`;
         conversationStorage.addEntry({
           sender: 'assistant',
           text: errorReply,

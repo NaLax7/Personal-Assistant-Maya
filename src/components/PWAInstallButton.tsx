@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Smartphone,
   Tablet,
@@ -6,9 +6,9 @@ import {
   Copy,
   X,
   ShieldCheck,
-  Wifi,
   Download,
   Share,
+  WifiOff,
 } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
@@ -16,21 +16,8 @@ export const PWAInstallButton: React.FC = () => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
-  const [lanUrls, setLanUrls] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (!showInstallModal) return;
-    fetch('/api/network-info')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && Array.isArray(data.lanUrls)) {
-          setLanUrls(data.lanUrls);
-        }
-      })
-      .catch(() => {});
-  }, [showInstallModal]);
-
-  // Automatically suppress install trigger once launched as an installed standalone PWA
+  // Automatically suppress install trigger once launched as an installed standalone app
   if (isInstalled) {
     return null;
   }
@@ -62,7 +49,7 @@ export const PWAInstallButton: React.FC = () => {
       <button
         onClick={handleInstallClick}
         className="flex items-center gap-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 px-3 py-1.5 text-xs font-medium text-sky-300 hover:text-white transition-colors whitespace-nowrap shrink-0 border border-slate-800 cursor-pointer"
-        title="Install Maya on your Phone or Tablet"
+        title="Install Maya directly onto your Tablet or Phone"
       >
         <Download className="w-3.5 h-3.5 text-sky-400" />
         <span>Install</span>
@@ -85,26 +72,25 @@ export const PWAInstallButton: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">
-                  Install Maya on Phone &amp; Tablet
+                  Install Maya on Tablet or Phone
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Android, iPhone, and Huawei MediaPad T3 (Same Wi-Fi)
+                  Runs independently by itself — no computer needed
                 </p>
               </div>
             </div>
 
             <div className="space-y-3 my-3">
-              {/* Primary HTTPS URL */}
+              {/* Primary Standalone HTTPS URL */}
               <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-emerald-500/40">
                 <div className="flex items-center gap-2 mb-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
                   <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
-                    Recommended: Instant Install &amp; Live Mic (HTTPS)
+                    Direct Standalone App Link (HTTPS)
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Open this secure link on your phone (Android Chrome or iPhone Safari) to enable
-                  one-tap app install and microphone access:
+                  Open this link directly on your Android tablet (Chrome) or iPhone/iPad (Safari) to install Maya as its own standalone app:
                 </p>
                 <div className="mt-2 flex items-center gap-2 p-2 rounded-xl bg-slate-900 border border-slate-800 font-mono text-[11px] text-sky-300">
                   <span className="truncate flex-1 font-semibold">{currentUrl}</span>
@@ -131,16 +117,16 @@ export const PWAInstallButton: React.FC = () => {
               <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs space-y-2.5">
                 <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-200 uppercase tracking-wider">
                   <Tablet className="w-3.5 h-3.5 text-sky-400" />
-                  <span>{isIOS ? 'iPhone / iPad (Safari)' : 'Android Phone & Tablet (Chrome)'}</span>
+                  <span>{isIOS ? 'iPhone / iPad (Safari)' : 'Android Tablet & Phone (Chrome)'}</span>
                 </div>
 
                 {isIOS ? (
                   <ol className="space-y-1.5 text-slate-300 list-decimal list-inside">
                     <li>
-                      Open the link above in <strong>Safari</strong> on your iPhone.
+                      Open this link in <strong>Safari</strong> on your iPhone or iPad.
                     </li>
                     <li>
-                      Tap the <strong>Share</strong> icon (<Share className="w-3 h-3 inline mx-0.5" />) at the bottom bar.
+                      Tap the <strong>Share</strong> icon (<Share className="w-3 h-3 inline mx-0.5" />) at the bottom or top bar.
                     </li>
                     <li>
                       Scroll down and tap <strong>Add to Home Screen</strong> → <strong>Add</strong>.
@@ -149,47 +135,29 @@ export const PWAInstallButton: React.FC = () => {
                 ) : (
                   <ol className="space-y-1.5 text-slate-300 list-decimal list-inside">
                     <li>
-                      Open the link in <strong>Google Chrome</strong> on your phone.
+                      Open this link in <strong>Google Chrome</strong> directly on your tablet or phone.
                     </li>
                     <li>
-                      Tap the <strong>three dots (⋮)</strong> in the top-right corner of Chrome.
+                      Tap Chrome&apos;s <strong>three dots (⋮)</strong> in the top-right corner.
                     </li>
                     <li>
-                      Tap <strong>Install app</strong> (or <strong>Add to Home screen</strong>).
+                      Tap <strong>Install app</strong> (or <strong>Add to Home screen</strong>) → <strong>Install</strong>.
+                    </li>
+                    <li>
+                      Open the new <strong>Maya</strong> icon on your home screen — it runs full-screen by itself.
                     </li>
                   </ol>
                 )}
               </div>
 
-              {/* Local Wi-Fi Server Mode */}
-              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-amber-500/30 text-xs space-y-2">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300 uppercase tracking-wider">
-                  <Wifi className="w-3.5 h-3.5" />
-                  <span>Same Wi-Fi Local Server Guide</span>
+              {/* Standalone & Offline Summary */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-sky-500/30 text-xs space-y-1.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-300 uppercase tracking-wider">
+                  <WifiOff className="w-3.5 h-3.5" />
+                  <span>Works Standalone &amp; Offline</span>
                 </div>
-                {lanUrls.length > 0 && (
-                  <div className="space-y-1">
-                    <span className="text-[11px] text-slate-400 block">Detected local Wi-Fi URLs:</span>
-                    {lanUrls.map((url) => (
-                      <div
-                        key={url}
-                        className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 font-mono text-[11px] text-amber-200"
-                      >
-                        <span className="truncate">{url}</span>
-                        <button
-                          onClick={() => handleCopyLink(url)}
-                          className="text-sky-400 hover:text-sky-300 font-sans text-[11px] font-semibold shrink-0 cursor-pointer"
-                        >
-                          {copiedUrl === url ? 'Copied' : 'Copy'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
                 <p className="text-[11px] text-slate-300 leading-relaxed">
-                  If running locally on your PC (<code className="text-amber-300">http://192.168.x.x:3000</code>):
-                  Android Chrome blocks microphone and PWA install on plain <code className="text-amber-300">http://</code> LAN URLs unless you open{' '}
-                  <code className="text-sky-300">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code> on the phone, add your PC&apos;s <code className="text-amber-300">http://192.168.x.x:3000</code> URL, enable it, and relaunch Chrome.
+                  Once installed, Maya stays on your tablet home screen with no computer required. Clock, date, Night Dim, tasks, schedule, wishes, and quick device voice commands even continue working offline.
                 </p>
               </div>
             </div>

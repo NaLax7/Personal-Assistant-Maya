@@ -54,7 +54,23 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff,woff2}'],
+          navigateFallbackDenylist: [/^\/api\//, /^\/live/],
           runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/api\.open-meteo\.com\/.*/i,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'weather-cache',
+                networkTimeoutSeconds: 4,
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 6,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
               handler: 'CacheFirst',
